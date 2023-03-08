@@ -107,7 +107,8 @@ import net.runelite.http.api.worlds.WorldType;
 @PluginDescriptor(
 	name = "World Finder",
 	description = "Allows you to quickly hop worlds",
-	tags = {"ping", "switcher"}
+	tags = {"ping", "switcher"},
+	conflicts = { "World Hopper" }
 )
 @Slf4j
 public class WorldFinderPlugin extends Plugin
