@@ -38,7 +38,7 @@ public interface WorldFinderConfig extends Config
 
 	@ConfigItem(
 		keyName = "quickhopOutOfDanger",
-		name = "Quick-hop out of dangerous worlds",
+		name = "Quick-hop avoid dangerous",
 		description = "Don't hop to a PVP/high risk world when quick-hopping",
 		position = 2
 	)
@@ -105,7 +105,7 @@ public interface WorldFinderConfig extends Config
 	@ConfigItem(
 		keyName = "regionFilter",
 		name = "Region filter",
-		description = "Only show and quick-hop to worlds in specific regions",
+		description = "Only show worlds in specific regions (ctrl+click to choose multiple)",
 		position = 9
 	)
 	default Set<RegionFilterMode> regionFilter()
@@ -116,7 +116,7 @@ public interface WorldFinderConfig extends Config
 	@ConfigItem(
 		keyName = "worldTypeFilter",
 		name = "World type filter",
-		description = "Only show worlds of specific types",
+		description = "Only show worlds of specific types (ctrl+click to choose multiple)",
 		position = 10
 	)
 	default Set<WorldTypeFilter> worldTypeFilter()
@@ -125,23 +125,46 @@ public interface WorldFinderConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "skillTotalFilter",
+		name = "Skill Total filter",
+		description = "Only show worlds of skill total (ctrl+click to choose multiple)",
+		position = 11
+	)
+	default Set<SkillTotalFilter> skillTotalFilter()
+	{
+		return Collections.emptySet();
+	}
+
+	@ConfigItem(
 		keyName = "displayPing",
 		name = "Display current ping",
 		description = "Displays ping to current game world",
-		position = 11
+		position = 12
 	)
 	default boolean displayPing()
 	{
 		return false;
 	}
+
 	@ConfigItem(
 		keyName = "twelveHourTime",
 		name = "12 Hour Time",
 		description = "Show time in 12 hour format.",
-		position = 12
+		position = 13
 	)
 	default boolean twelveHourTime()
 	{
 		return false;
+	}
+
+	@ConfigItem(
+		keyName = "pingFilter",
+		name = "Max Ping Filter",
+		description = "Filter worlds with ping greater than... (0 is no filter)",
+		position = 14
+	)
+	default int pingFilter()
+	{
+		return 0;
 	}
 }

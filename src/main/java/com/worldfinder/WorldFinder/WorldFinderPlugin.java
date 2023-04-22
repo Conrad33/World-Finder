@@ -40,8 +40,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
 import java.time.Instant;
-import java.time.temporal.TemporalField;
-import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -108,7 +106,7 @@ import net.runelite.http.api.worlds.WorldType;
 	name = "World Finder",
 	description = "Allows you to quickly hop worlds",
 	tags = {"ping", "switcher"},
-	conflicts = { "World Hopper" }
+	conflicts = {"World Hopper"}
 )
 @Slf4j
 public class WorldFinderPlugin extends Plugin
@@ -237,6 +235,8 @@ public class WorldFinderPlugin extends Plugin
 		panel.setRegionFilterMode(config.regionFilter());
 		panel.setWorldTypeFilters(config.worldTypeFilter());
 		panel.setTwelveHourFormat(config.twelveHourTime());
+		panel.setPingFilter(config.pingFilter());
+		panel.setSkillTotalFilters(config.skillTotalFilter());
 
 		// The plugin has its own executor for pings, as it blocks for a long time
 		hopperExecutorService = new ExecutorServiceExceptionLogger(Executors.newSingleThreadScheduledExecutor());
@@ -314,6 +314,14 @@ public class WorldFinderPlugin extends Plugin
 					break;
 				case "twelveHourTime":
 					panel.setTwelveHourFormat(config.twelveHourTime());
+					updateList();
+					break;
+				case "pingFilter":
+					panel.setPingFilter(config.pingFilter());
+					updateList();
+					break;
+				case "skillTotalFilter":
+					panel.setSkillTotalFilters(config.skillTotalFilter());
 					updateList();
 					break;
 			}
@@ -483,10 +491,8 @@ public class WorldFinderPlugin extends Plugin
 				int newWorld = client.getWorld();
 				setTimer(lastWorld); // update the timestamp of the last world, when hopping off
 				setTimer(newWorld); // update the timestamp of the current world, when hopping onto
-				System.out.println("setting timers");
 				if (partyService.isInParty())
 				{
-					System.out.println("In party, sending...");
 					partyService.send(new WorldTimerUpdate(lastWorld, getTimer(lastWorld)));
 					partyService.send(new WorldTimerUpdate(newWorld, getTimer(newWorld)));
 				}
@@ -500,7 +506,6 @@ public class WorldFinderPlugin extends Plugin
 	@Subscribe
 	public void onWorldTimerUpdate(WorldTimerUpdate update)
 	{
-		System.out.println("Received event");
 		storedTimers.put(update.getWorldId(), update.getTimeStamp());
 		updateList();
 	}
@@ -557,40 +562,35 @@ public class WorldFinderPlugin extends Plugin
 
 	private void hop(boolean previous)
 	{
+		// make sure client is logged in
 		WorldResult worldResult = worldService.getWorlds();
 		if (worldResult == null || client.getGameState() != GameState.LOGGED_IN)
 		{
 			return;
 		}
 
+		// and has an active world
 		World currentWorld = worldResult.findWorld(client.getWorld());
-
 		if (currentWorld == null)
 		{
 			return;
 		}
 
-		EnumSet<WorldType> currentWorldTypes = currentWorld.getTypes().clone();
-		// Make it so you always hop out of PVP and high risk worlds
-		if (config.quickhopOutOfDanger())
+		// Find the index of the current world in this plugins panel, 0 if not in
+		int worldIdx = 0;
+		for (WorldTableRow row : panel.rows)
 		{
-			currentWorldTypes.remove(WorldType.PVP);
-			currentWorldTypes.remove(WorldType.HIGH_RISK);
+			if (currentWorld == row.getWorld())
+			{
+				worldIdx = panel.rows.indexOf(row);
+			}
 		}
-		// Don't regard these worlds as a type that must be hopped between
-		currentWorldTypes.remove(WorldType.BOUNTY);
-		currentWorldTypes.remove(WorldType.SKILL_TOTAL);
-		currentWorldTypes.remove(WorldType.LAST_MAN_STANDING);
 
-		List<World> worlds = worldResult.getWorlds();
-
-		int worldIdx = worlds.indexOf(currentWorld);
 		int totalLevel = client.getTotalLevel();
+		World newWorld = currentWorld;
 
-		final Set<RegionFilterMode> regionFilter = config.regionFilter();
-
-		World world;
-		do
+		// Loop through every world in the panel to find the next valid world to hop to
+		for (int i = 0; i < panel.rows.size(); i++)
 		{
 			/*
 				Get the previous or next world in the list,
@@ -604,42 +604,38 @@ public class WorldFinderPlugin extends Plugin
 
 				if (worldIdx < 0)
 				{
-					worldIdx = worlds.size() - 1;
+					worldIdx = panel.rows.size() - 1;
 				}
 			}
 			else
 			{
 				worldIdx++;
 
-				if (worldIdx >= worlds.size())
+				if (worldIdx >= panel.rows.size())
 				{
 					worldIdx = 0;
 				}
 			}
 
-			world = worlds.get(worldIdx);
+			// get world from the world panel, so filtering is already applied
+			World world = panel.rows.get(worldIdx).getWorld();
 
-			// Check world region if filter is enabled
-			if (!regionFilter.isEmpty() && !regionFilter.contains(RegionFilterMode.of(world.getRegion())))
+
+			// Avoid switching to near-max population worlds, as it will refuse to allow the hop if the world is full
+			if (world.getPlayers() >= MAX_PLAYER_COUNT)
 			{
 				continue;
 			}
 
-			EnumSet<WorldType> types = world.getTypes().clone();
-
-			types.remove(WorldType.BOUNTY);
-			// Treat LMS world like casual world
-			types.remove(WorldType.LAST_MAN_STANDING);
-
-			if (types.contains(WorldType.SKILL_TOTAL))
+			// Don't hop to skill total worlds that the player can't hop to
+			if (world.getTypes().contains(WorldType.SKILL_TOTAL))
 			{
 				try
 				{
 					int totalRequirement = Integer.parseInt(world.getActivity().substring(0, world.getActivity().indexOf(" ")));
-
-					if (totalLevel >= totalRequirement)
+					if (totalLevel < totalRequirement)
 					{
-						types.remove(WorldType.SKILL_TOTAL);
+						continue;
 					}
 				}
 				catch (NumberFormatException ex)
@@ -648,31 +644,31 @@ public class WorldFinderPlugin extends Plugin
 				}
 			}
 
-			// Avoid switching to near-max population worlds, as it will refuse to allow the hop if the world is full
-			if (world.getPlayers() >= MAX_PLAYER_COUNT)
+			// Don't hop to offline worlds
+			if (world.getPlayers() < 0)
 			{
 				continue;
 			}
 
-			if (world.getPlayers() < 0)
+			// Don't hop to dangerous worlds if the config is set
+			if (config.quickhopOutOfDanger())
 			{
-				// offline world
-				continue;
+				if (world.getTypes().contains(WorldType.HIGH_RISK) || world.getTypes().contains(WorldType.PVP))
+				{
+					continue;
+				}
 			}
 
 			// Break out if we've found a good world to hop to
-			if (currentWorldTypes.equals(types))
-			{
-				break;
-			}
+			newWorld = world;
+			break;
 		}
-		while (world != currentWorld);
 
-		if (world == currentWorld)
+		if (newWorld == currentWorld)
 		{
 			String chatMessage = new ChatMessageBuilder()
 				.append(ChatColorType.NORMAL)
-				.append("Couldn't find a world to quick-hop to.")
+				.append("Couldn't find a world to quick-hop to. Check the World Finder panel to see if too many worlds are being filtered.")
 				.build();
 
 			chatMessageManager.queue(QueuedMessage.builder()
@@ -682,7 +678,7 @@ public class WorldFinderPlugin extends Plugin
 		}
 		else
 		{
-			hop(world.getId());
+			hop(newWorld.getId());
 		}
 	}
 

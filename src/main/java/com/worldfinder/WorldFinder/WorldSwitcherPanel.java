@@ -66,7 +66,7 @@ class WorldSwitcherPanel extends PluginPanel
 	private WorldOrder orderIndex = WorldOrder.WORLD;
 	private boolean ascendingOrder = true;
 
-	private final ArrayList<WorldTableRow> rows = new ArrayList<>();
+	public final ArrayList<WorldTableRow> rows = new ArrayList<>();
 	private final WorldFinderPlugin plugin;
 	@Setter(AccessLevel.PACKAGE)
 	private SubscriptionFilterMode subscriptionFilterMode;
@@ -77,6 +77,13 @@ class WorldSwitcherPanel extends PluginPanel
 
 	@Setter(AccessLevel.PACKAGE)
 	private Boolean twelveHourFormat;
+
+	@Setter(AccessLevel.PACKAGE)
+	private int pingFilter;
+
+	@Setter(AccessLevel.PACKAGE)
+	private Set<SkillTotalFilter> skillTotalFilters;
+
 
 	WorldSwitcherPanel(WorldFinderPlugin plugin)
 	{
@@ -188,7 +195,7 @@ class WorldSwitcherPanel extends PluginPanel
 					});
 				case TIMER:
 					// Leave worlds with no timestamp at the top
-					return  getCompareValue(r1, r2, row -> {
+					return getCompareValue(r1, r2, row -> {
 						Long timer = row.getTimer();
 						return timer != null ? timer : 0;
 					});
@@ -281,6 +288,40 @@ class WorldSwitcherPanel extends PluginPanel
 				}
 			}
 
+			// Filter worlds by ping from config, if it's not 0
+			if (pingFilter != 0)
+			{
+				Integer ping = plugin.getStoredPing(world);
+				if (ping == null || ping > pingFilter)
+				{
+					// Filter out worlds with ping higher than config threshold
+					continue;
+				}
+			}
+
+			// Filter by skill total
+			if (!skillTotalFilters.isEmpty())
+			{
+				String activity = world.getActivity();
+				if(activity.contains("skill total")) // if it's a skill total check if its being filtered
+				{
+					boolean filter = true;
+					for (SkillTotalFilter skillTotalFilter : skillTotalFilters)
+					{
+						if (activity.equals(skillTotalFilter.getSkillTotal()))
+						{
+							filter = false;
+							break;
+						}
+					}
+					if (filter)
+					{
+						continue;
+					}
+				}
+			}
+
+			// populate row
 			rows.add(buildRow(world, i % 2 == 0, world.getId() == plugin.getCurrentWorld() && plugin.getLastWorld() != 0, plugin.isFavorite(world), twelveHourFormat));
 		}
 

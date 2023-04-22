@@ -36,7 +36,7 @@ enum WorldTypeFilter
 			@Override
 			boolean matches(Set<WorldType> types)
 			{
-				EnumSet<WorldType> normal = EnumSet.of(WorldType.MEMBERS, WorldType.BOUNTY, WorldType.SKILL_TOTAL, WorldType.HIGH_RISK, WorldType.LAST_MAN_STANDING);
+				EnumSet<WorldType> normal = EnumSet.of(WorldType.MEMBERS, WorldType.LAST_MAN_STANDING, WorldType.SKILL_TOTAL);
 				EnumSet<WorldType> inverse = EnumSet.complementOf(normal);
 				return Sets.intersection(types, inverse).isEmpty();
 			}
@@ -79,6 +79,22 @@ enum WorldTypeFilter
 			boolean matches(Set<WorldType> types)
 			{
 				return types.contains(WorldType.PVP);
+			}
+		},
+	TARGET
+		{
+			@Override
+			boolean matches(Set<WorldType> types)
+			{
+				return types.contains(WorldType.BOUNTY);
+			}
+		},
+	HIGH_RISK
+		{
+			@Override
+			boolean matches(Set<WorldType> types)
+			{
+				return types.contains(WorldType.HIGH_RISK) && !types.contains(WorldType.PVP);
 			}
 		},
 	SKILL_TOTAL
