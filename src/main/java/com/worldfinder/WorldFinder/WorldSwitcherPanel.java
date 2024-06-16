@@ -31,6 +31,7 @@ import java.awt.Dimension;
 import java.awt.GridLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -322,7 +323,7 @@ class WorldSwitcherPanel extends PluginPanel
 			if (!skillTotalFilters.isEmpty())
 			{
 				String activity = world.getActivity();
-				if(activity.contains("skill total")) // if it's a skill total check if its being filtered
+				if (activity.contains("skill total")) // if it's a skill total check if its being filtered
 				{
 					boolean filter = true;
 					for (SkillTotalFilter skillTotalFilter : skillTotalFilters)
@@ -479,13 +480,23 @@ class WorldSwitcherPanel extends PluginPanel
 		return header;
 	}
 
+	private long lastHoppedAt = 0;
+
 	/**
 	 * Builds a table row, that displays the world's information.
 	 */
 	private WorldTableRow buildRow(World world, boolean stripe, boolean current, boolean favorite, boolean twelveHourFormat)
 	{
 		WorldTableRow row = new WorldTableRow(world, current, favorite, twelveHourFormat, plugin.getStoredPing(world), plugin.getTimer(world.getId()),
-			plugin::hopTo,
+			world1 -> {
+				long now = System.currentTimeMillis();
+				if ( now - lastHoppedAt < 500 ) // 500ms Debounce on the hop
+				{
+					return;
+				}
+				lastHoppedAt = now;
+				plugin.hopTo(world1);
+			},
 			(world12, add) ->
 			{
 				if (add)
