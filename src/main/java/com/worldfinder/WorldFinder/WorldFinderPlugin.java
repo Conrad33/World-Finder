@@ -57,6 +57,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.ChatPlayer;
 import net.runelite.api.Client;
+import net.runelite.api.EnumID;
 import net.runelite.api.Friend;
 import net.runelite.api.FriendsChatManager;
 import net.runelite.api.FriendsChatMember;
@@ -73,7 +74,9 @@ import net.runelite.api.events.GameTick;
 import net.runelite.api.events.MenuEntryAdded;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WorldListLoad;
-import net.runelite.api.widgets.WidgetInfo;
+import net.runelite.api.widgets.ComponentID;
+import net.runelite.api.widgets.InterfaceID;
+import net.runelite.api.widgets.WidgetUtil;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.chat.ChatColorType;
 import net.runelite.client.chat.ChatMessageBuilder;
@@ -240,15 +243,14 @@ public class WorldFinderPlugin extends Plugin
 
 		// The plugin has its own executor for pings, as it blocks for a long time
 		hopperExecutorService = new ExecutorServiceExceptionLogger(Executors.newSingleThreadScheduledExecutor());
+		// populate initial world list
+		hopperExecutorService.execute(this::updateList);
 		// Run the first-run ping
 		hopperExecutorService.execute(this::pingInitialWorlds);
 
-		// Give some initial delay - this won't run until after pingInitialWorlds finishes from tick() anyway
+		// Give some initial delay - this won't run until after pingInitialWorlds finishes anyway
 		pingFuture = hopperExecutorService.scheduleWithFixedDelay(this::pingNextWorld, 15, 3, TimeUnit.SECONDS);
 		currPingFuture = hopperExecutorService.scheduleWithFixedDelay(this::pingCurrentWorld, 15, 1, TimeUnit.SECONDS);
-
-		// populate initial world list
-		updateList();
 	}
 
 	@Override
@@ -424,11 +426,11 @@ public class WorldFinderPlugin extends Plugin
 		}
 
 		final int componentId = event.getActionParam1();
-		int groupId = WidgetInfo.TO_GROUP(componentId);
+		int groupId = WidgetUtil.componentToInterface(componentId);
 		String option = event.getOption();
 
-		if (groupId == WidgetInfo.FRIENDS_LIST.getGroupId() || groupId == WidgetInfo.FRIENDS_CHAT.getGroupId()
-			|| componentId == WidgetInfo.CLAN_MEMBER_LIST.getId() || componentId == WidgetInfo.CLAN_GUEST_MEMBER_LIST.getId())
+		if (groupId == InterfaceID.FRIEND_LIST || groupId == InterfaceID.FRIENDS_CHAT
+			|| componentId == ComponentID.CLAN_MEMBERS || componentId == ComponentID.CLAN_GUEST_MEMBERS)
 		{
 			boolean after;
 
@@ -562,35 +564,40 @@ public class WorldFinderPlugin extends Plugin
 
 	private void hop(boolean previous)
 	{
-		// make sure client is logged in
 		WorldResult worldResult = worldService.getWorlds();
 		if (worldResult == null || client.getGameState() != GameState.LOGGED_IN)
 		{
 			return;
 		}
 
-		// and has an active world
 		World currentWorld = worldResult.findWorld(client.getWorld());
+
 		if (currentWorld == null)
 		{
 			return;
 		}
 
-		// Find the index of the current world in this plugins panel, 0 if not in
-		int worldIdx = 0;
-		for (WorldTableRow row : panel.rows)
+		EnumSet<WorldType> currentWorldTypes = currentWorld.getTypes().clone();
+		// Make it so you always hop out of PVP and high risk worlds
+		if (config.quickhopOutOfDanger())
 		{
-			if (currentWorld == row.getWorld())
-			{
-				worldIdx = panel.rows.indexOf(row);
-			}
+			currentWorldTypes.remove(WorldType.PVP);
+			currentWorldTypes.remove(WorldType.HIGH_RISK);
 		}
+		// Don't regard these worlds as a type that must be hopped between
+		currentWorldTypes.remove(WorldType.BOUNTY);
+		currentWorldTypes.remove(WorldType.SKILL_TOTAL);
+		currentWorldTypes.remove(WorldType.LAST_MAN_STANDING);
 
+		List<World> worlds = worldResult.getWorlds();
+
+		int worldIdx = worlds.indexOf(currentWorld);
 		int totalLevel = client.getTotalLevel();
-		World newWorld = currentWorld;
 
-		// Loop through every world in the panel to find the next valid world to hop to
-		for (int i = 0; i < panel.rows.size(); i++)
+		final Set<RegionFilterMode> regionFilter = config.regionFilter();
+
+		World world;
+		do
 		{
 			/*
 				Get the previous or next world in the list,
@@ -604,38 +611,42 @@ public class WorldFinderPlugin extends Plugin
 
 				if (worldIdx < 0)
 				{
-					worldIdx = panel.rows.size() - 1;
+					worldIdx = worlds.size() - 1;
 				}
 			}
 			else
 			{
 				worldIdx++;
 
-				if (worldIdx >= panel.rows.size())
+				if (worldIdx >= worlds.size())
 				{
 					worldIdx = 0;
 				}
 			}
 
-			// get world from the world panel, so filtering is already applied
-			World world = panel.rows.get(worldIdx).getWorld();
+			world = worlds.get(worldIdx);
 
-
-			// Avoid switching to near-max population worlds, as it will refuse to allow the hop if the world is full
-			if (world.getPlayers() >= MAX_PLAYER_COUNT)
+			// Check world region if filter is enabled
+			if (!regionFilter.isEmpty() && !regionFilter.contains(RegionFilterMode.of(world.getRegion())))
 			{
 				continue;
 			}
 
-			// Don't hop to skill total worlds that the player can't hop to
-			if (world.getTypes().contains(WorldType.SKILL_TOTAL))
+			EnumSet<WorldType> types = world.getTypes().clone();
+
+			types.remove(WorldType.BOUNTY);
+			// Treat LMS world like casual world
+			types.remove(WorldType.LAST_MAN_STANDING);
+
+			if (types.contains(WorldType.SKILL_TOTAL))
 			{
 				try
 				{
 					int totalRequirement = Integer.parseInt(world.getActivity().substring(0, world.getActivity().indexOf(" ")));
-					if (totalLevel < totalRequirement)
+
+					if (totalLevel >= totalRequirement)
 					{
-						continue;
+						types.remove(WorldType.SKILL_TOTAL);
 					}
 				}
 				catch (NumberFormatException ex)
@@ -644,27 +655,27 @@ public class WorldFinderPlugin extends Plugin
 				}
 			}
 
-			// Don't hop to offline worlds
-			if (world.getPlayers() < 0)
+			// Avoid switching to near-max population worlds, as it will refuse to allow the hop if the world is full
+			if (world.getPlayers() >= MAX_PLAYER_COUNT)
 			{
 				continue;
 			}
 
-			// Don't hop to dangerous worlds if the config is set
-			if (config.quickhopOutOfDanger())
+			if (world.getPlayers() < 0)
 			{
-				if (world.getTypes().contains(WorldType.HIGH_RISK) || world.getTypes().contains(WorldType.PVP))
-				{
-					continue;
-				}
+				// offline world
+				continue;
 			}
 
 			// Break out if we've found a good world to hop to
-			newWorld = world;
-			break;
+			if (currentWorldTypes.equals(types))
+			{
+				break;
+			}
 		}
+		while (world != currentWorld);
 
-		if (newWorld == currentWorld)
+		if (world == currentWorld)
 		{
 			String chatMessage = new ChatMessageBuilder()
 				.append(ChatColorType.NORMAL)
@@ -678,7 +689,7 @@ public class WorldFinderPlugin extends Plugin
 		}
 		else
 		{
-			hop(newWorld.getId());
+			hop(world.getId());
 		}
 	}
 
@@ -704,6 +715,7 @@ public class WorldFinderPlugin extends Plugin
 	private void hop(World world)
 	{
 		assert client.isClientThread();
+
 		final net.runelite.api.World rsWorld = client.createWorld();
 		rsWorld.setActivity(world.getActivity());
 		rsWorld.setAddress(world.getAddress());
@@ -749,7 +761,7 @@ public class WorldFinderPlugin extends Plugin
 			return;
 		}
 
-		if (client.getWidget(WidgetInfo.WORLD_SWITCHER_LIST) == null)
+		if (client.getWidget(ComponentID.WORLD_SWITCHER_WORLD_LIST) == null)
 		{
 			client.openWorldHopper();
 
@@ -903,7 +915,11 @@ public class WorldFinderPlugin extends Plugin
 
 		int ping = ping(world);
 		log.trace("Ping for world {} is: {}", world.getId(), ping);
-		SwingUtilities.invokeLater(() -> panel.updatePing(world.getId(), ping));
+
+		if (panel.isActive())
+		{
+			SwingUtilities.invokeLater(() -> panel.updatePing(world.getId(), ping));
+		}
 	}
 
 	/**
@@ -925,10 +941,20 @@ public class WorldFinderPlugin extends Plugin
 			return;
 		}
 
-		currentPing = ping(currentWorld);
+		int ping = ping(currentWorld);
 		log.trace("Ping for current world is: {}", currentPing);
 
-		SwingUtilities.invokeLater(() -> panel.updatePing(currentWorld.getId(), currentPing));
+		if (ping < 0)
+		{
+			return;
+		}
+
+		currentPing = ping;
+
+		if (panel.isActive())
+		{
+			SwingUtilities.invokeLater(() -> panel.updatePing(currentWorld.getId(), currentPing));
+		}
 	}
 
 	Integer getStoredPing(World world)
