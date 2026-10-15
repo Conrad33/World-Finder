@@ -30,13 +30,9 @@ import java.awt.Dimension;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.text.SimpleDateFormat;
-import java.util.Calendar;
 import java.util.EnumSet;
-import java.util.Locale;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
-import javax.inject.Inject;
 import javax.swing.ImageIcon;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
@@ -56,16 +52,22 @@ class WorldTableRow extends JPanel
 	private static final ImageIcon FLAG_AUS;
 	private static final ImageIcon FLAG_UK;
 	private static final ImageIcon FLAG_US;
+	private static final ImageIcon FLAG_US_EAST;
+	private static final ImageIcon FLAG_US_WEST;
 	private static final ImageIcon FLAG_GER;
+	private static final ImageIcon FLAG_BR;
+	private static final ImageIcon FLAG_JP;
+	private static final ImageIcon FLAG_SG;
+	private static final ImageIcon FLAG_ZA;
 
-	private static final int WORLD_COLUMN_WIDTH = 50;
-	private static final int PLAYERS_COLUMN_WIDTH = 30;
-	private static final int TIMER_COLUMN_WIDTH = 45;
-	private static final int PING_COLUMN_WIDTH = 30;
+	private static final int WORLD_COLUMN_WIDTH = 60;
+	private static final int PLAYERS_COLUMN_WIDTH = 40;
+	private static final int PING_COLUMN_WIDTH = 35;
+	private static final int TIME_COLUMN_WIDTH = 40; // World Finder
 
 	private static final Color CURRENT_WORLD = new Color(66, 227, 17);
 	private static final Color DANGEROUS_WORLD = new Color(251, 62, 62);
-	private static final Color TOURNAMENT_WORLD = new Color(79, 145, 255);
+	private static final Color BETA_WORLD = new Color(79, 145, 255);
 	private static final Color MEMBERS_WORLD = new Color(210, 193, 53);
 	private static final Color FREE_WORLD = new Color(200, 200, 200);
 	private static final Color SEASONAL_WORLD = new Color(133, 177, 178);
@@ -75,39 +77,48 @@ class WorldTableRow extends JPanel
 
 	static
 	{
-		FLAG_AUS = new ImageIcon(ImageUtil.loadImageResource(WorldFinderPlugin.class, "/flag_aus.png"));
-		FLAG_UK = new ImageIcon(ImageUtil.loadImageResource(WorldFinderPlugin.class, "/flag_uk.png"));
-		FLAG_US = new ImageIcon(ImageUtil.loadImageResource(WorldFinderPlugin.class, "/flag_us.png"));
-		FLAG_GER = new ImageIcon(ImageUtil.loadImageResource(WorldFinderPlugin.class, "/flag_ger.png"));
+		FLAG_AUS = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_aus.png"));
+		FLAG_UK = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_uk.png"));
+		FLAG_US = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_us.png"));
+		FLAG_US_EAST = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_us_east.png"));
+		FLAG_US_WEST = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_us_west.png"));
+		FLAG_GER = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_ger.png"));
+		FLAG_BR = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_br.png"));
+		FLAG_JP = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_jp.png"));
+		FLAG_SG = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_sg.png"));
+		FLAG_ZA = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_za.png"));
 	}
+
+	private static final int LOCATION_US_WEST = -73;
+	private static final int LOCATION_US_EAST = -42;
+
+	@Getter
+	private final World world;
+	private final BiConsumer<World, Boolean> onFavorite;
+	@Getter(AccessLevel.PACKAGE)
+	private int playerCount;
+	private final int worldLocation; // from enum WORLD_LOCATIONS
 
 	private final JMenuItem favoriteMenuOption = new JMenuItem();
 
 	private JLabel worldField;
 	private JLabel playerCountField;
-	private JLabel timerField;
 	private JLabel activityField;
 	private JLabel pingField;
-	private boolean twelveHourFormat;
-	private final BiConsumer<World, Boolean> onFavorite;
-
-	@Getter
-	private final World world;
-
-	@Getter(AccessLevel.PACKAGE)
-	private int updatedPlayerCount;
+	private JLabel timeField; // World Finder
 
 	private int ping;
-	private Long timer;
+	@Getter(AccessLevel.PACKAGE)
+	private Long lastVisited; // World Finder
 
 	private Color lastBackground;
 
-	WorldTableRow(World world, boolean current, boolean favorite, boolean twelveHourFormat, Integer ping, Long timer, Consumer<World> onSelect, BiConsumer<World, Boolean> onFavorite)
+	WorldTableRow(World world, boolean current, boolean favorite, Integer ping, Consumer<World> onSelect, BiConsumer<World, Boolean> onFavorite, int worldLocation)
 	{
 		this.world = world;
 		this.onFavorite = onFavorite;
-		this.updatedPlayerCount = world.getPlayers();
-		this.twelveHourFormat = twelveHourFormat;
+		this.playerCount = world.getPlayers();
+		this.worldLocation = worldLocation;
 
 		setLayout(new BorderLayout());
 		setBorder(new EmptyBorder(2, 0, 2, 0));
@@ -183,19 +194,15 @@ class WorldTableRow extends JPanel
 		playersField.setPreferredSize(new Dimension(PLAYERS_COLUMN_WIDTH, 0));
 		playersField.setOpaque(false);
 
-		JPanel timerField = buildTimerField(timer);
-		timerField.setPreferredSize(new Dimension(TIMER_COLUMN_WIDTH, 0));
-		timerField.setOpaque(false);
-
 		JPanel activityField = buildActivityField();
-		activityField.setBorder(new EmptyBorder(5, 0, 5, 0));
+		activityField.setBorder(new EmptyBorder(5, 5, 5, 5));
 		activityField.setOpaque(false);
 
 		recolour(current);
 
 		leftSide.add(worldField, BorderLayout.WEST);
 		leftSide.add(playersField, BorderLayout.CENTER);
-		leftSide.add(timerField, BorderLayout.EAST);
+		leftSide.add(buildTimeField(), BorderLayout.EAST); // World Finder
 		rightSide.add(activityField, BorderLayout.CENTER);
 		rightSide.add(pingField, BorderLayout.EAST);
 
@@ -216,15 +223,12 @@ class WorldTableRow extends JPanel
 			favoriteMenuOption.removeActionListener(listener);
 		}
 
-		favoriteMenuOption.addActionListener(e ->
-		{
-			onFavorite.accept(world, !favorite);
-		});
+		favoriteMenuOption.addActionListener(e -> onFavorite.accept(world, !favorite));
 	}
 
 	void updatePlayerCount(int playerCount)
 	{
-		this.updatedPlayerCount = playerCount;
+		this.playerCount = playerCount;
 		playerCountField.setText(playerCountString(playerCount));
 	}
 
@@ -237,6 +241,13 @@ class WorldTableRow extends JPanel
 	{
 		this.ping = ping;
 		pingField.setText(ping <= 0 ? "-" : Integer.toString(ping));
+	}
+
+	// World Finder
+	void setLastVisited(Long lastVisited, String text)
+	{
+		this.lastVisited = lastVisited;
+		timeField.setText(text);
 	}
 
 	void hidePing()
@@ -252,26 +263,6 @@ class WorldTableRow extends JPanel
 	int getPing()
 	{
 		return ping;
-	}
-
-	void setTimer(Long timer)
-	{
-		this.timer = timer;
-		Calendar calendar = Calendar.getInstance();
-		calendar.setTimeInMillis(timer);
-		String format = "HH:mm";
-		if(twelveHourFormat){
-			format = "hh:mm";
-		}
-		SimpleDateFormat sdf = new SimpleDateFormat(format, Locale.UK);
-		String formattedTime = sdf.format(calendar.getTime());
-		timerField.setText(timer == null ? "-" : formattedTime);
-
-	}
-
-	Long getTimer()
-	{
-		return timer;
 	}
 
 	public void recolour(boolean current)
@@ -294,13 +285,14 @@ class WorldTableRow extends JPanel
 		{
 			activityField.setForeground(DANGEROUS_WORLD);
 		}
-		else if (types.contains(WorldType.SEASONAL))
+		else if (types.contains(WorldType.SEASONAL) || types.contains(WorldType.TOURNAMENT))
 		{
 			activityField.setForeground(SEASONAL_WORLD);
 		}
-		else if (types.contains(WorldType.NOSAVE_MODE))
+		else if (types.contains(WorldType.NOSAVE_MODE) || types.contains(WorldType.BETA_WORLD)
+			|| types.contains(WorldType.LEGACY_ONLY)) // sometimes used for arbitrarily restricted worlds
 		{
-			activityField.setForeground(TOURNAMENT_WORLD);
+			activityField.setForeground(BETA_WORLD);
 		}
 		else if (types.contains(WorldType.PVP_ARENA))
 		{
@@ -328,7 +320,7 @@ class WorldTableRow extends JPanel
 	private JPanel buildPlayersField()
 	{
 		JPanel column = new JPanel(new BorderLayout());
-		column.setBorder(new EmptyBorder(0, 1, 0, 0));
+		column.setBorder(new EmptyBorder(0, 5, 0, 5));
 
 		playerCountField = new JLabel(playerCountString(world.getPlayers()));
 		playerCountField.setFont(FontManager.getRunescapeSmallFont());
@@ -338,22 +330,18 @@ class WorldTableRow extends JPanel
 		return column;
 	}
 
-	/**
-	 * Builds the timer field (when was last logged-on on that world).
-	 */
-	private JPanel buildTimerField(Long timer)
+	// World Finder: "last visited" column
+	private JPanel buildTimeField()
 	{
 		JPanel column = new JPanel(new BorderLayout());
-		column.setBorder(new EmptyBorder(0, 1, 0, 0));
+		column.setBorder(new EmptyBorder(0, 5, 0, 5));
+		column.setPreferredSize(new Dimension(TIME_COLUMN_WIDTH, 0));
+		column.setOpaque(false);
 
-		timerField = new JLabel("-");
-		timerField.setFont(FontManager.getRunescapeSmallFont());
+		timeField = new JLabel("-");
+		timeField.setFont(FontManager.getRunescapeSmallFont());
 
-		column.add(timerField, BorderLayout.WEST);
-		if (timer != null)
-		{
-			setTimer(timer);
-		}
+		column.add(timeField, BorderLayout.WEST);
 
 		return column;
 	}
@@ -361,7 +349,7 @@ class WorldTableRow extends JPanel
 	private JPanel buildPingField(Integer ping)
 	{
 		JPanel column = new JPanel(new BorderLayout());
-		column.setBorder(new EmptyBorder(0, 1, 0, 2));
+		column.setBorder(new EmptyBorder(0, 5, 0, 5));
 
 		pingField = new JLabel("-");
 		pingField.setFont(FontManager.getRunescapeSmallFont());
@@ -382,7 +370,7 @@ class WorldTableRow extends JPanel
 	private JPanel buildActivityField()
 	{
 		JPanel column = new JPanel(new BorderLayout());
-		column.setBorder(new EmptyBorder(0, 1, 0, 0));
+		column.setBorder(new EmptyBorder(0, 5, 0, 5));
 
 		String activity = world.getActivity();
 		activityField = new JLabel(activity);
@@ -436,11 +424,11 @@ class WorldTableRow extends JPanel
 	private JPanel buildWorldField()
 	{
 		JPanel column = new JPanel(new BorderLayout(7, 0));
-		column.setBorder(new EmptyBorder(0, 3, 0, 0));
+		column.setBorder(new EmptyBorder(0, 5, 0, 5));
 
 		worldField = new JLabel(world.getId() + "");
 
-		ImageIcon flagIcon = getFlag(world.getRegion());
+		ImageIcon flagIcon = getFlag(world.getRegion(), worldLocation);
 		if (flagIcon != null)
 		{
 			JLabel flag = new JLabel(flagIcon);
@@ -451,7 +439,7 @@ class WorldTableRow extends JPanel
 		return column;
 	}
 
-	private static ImageIcon getFlag(WorldRegion region)
+	private static ImageIcon getFlag(WorldRegion region, int worldLocation)
 	{
 		if (region == null)
 		{
@@ -461,13 +449,29 @@ class WorldTableRow extends JPanel
 		switch (region)
 		{
 			case UNITED_STATES_OF_AMERICA:
-				return FLAG_US;
+				switch (worldLocation)
+				{
+					case LOCATION_US_WEST:
+						return FLAG_US_WEST;
+					case LOCATION_US_EAST:
+						return FLAG_US_EAST;
+					default:
+						return FLAG_US;
+				}
 			case UNITED_KINGDOM:
 				return FLAG_UK;
 			case AUSTRALIA:
 				return FLAG_AUS;
 			case GERMANY:
 				return FLAG_GER;
+			case BRAZIL:
+				return FLAG_BR;
+			case JAPAN:
+				return FLAG_JP;
+			case SINGAPORE:
+				return FLAG_SG;
+			case SOUTH_AFRICA:
+				return FLAG_ZA;
 			default:
 				return null;
 		}

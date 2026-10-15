@@ -31,7 +31,6 @@ import java.awt.Dimension;
 import java.awt.GridLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -54,10 +53,10 @@ class WorldSwitcherPanel extends PluginPanel
 {
 	private static final Color ODD_ROW = new Color(44, 44, 44);
 
-	private static final int WORLD_COLUMN_WIDTH = 50;
-	private static final int PLAYERS_COLUMN_WIDTH = 30;
-	private static final int PING_COLUMN_WIDTH = 43;
-	private static final int TIMER_COLUMN_WIDTH = 45;
+	private static final int WORLD_COLUMN_WIDTH = 60;
+	private static final int PLAYERS_COLUMN_WIDTH = 40;
+	private static final int PING_COLUMN_WIDTH = 47;
+	private static final int TIME_COLUMN_WIDTH = 40; // World Finder
 
 	private final JPanel listContainer = new JPanel();
 
@@ -67,14 +66,14 @@ class WorldSwitcherPanel extends PluginPanel
 	private WorldTableHeader worldHeader;
 	private WorldTableHeader playersHeader;
 	private WorldTableHeader activityHeader;
-	private WorldTableHeader timerHeader;
 	private WorldTableHeader pingHeader;
+	private WorldTableHeader timeHeader; // World Finder
 
 	private WorldOrder orderIndex = WorldOrder.WORLD;
 	private boolean ascendingOrder = true;
 
-	public final ArrayList<WorldTableRow> rows = new ArrayList<>();
-	private final WorldFinderPlugin plugin;
+	private final ArrayList<WorldTableRow> rows = new ArrayList<>();
+	private final WorldHopperPlugin plugin;
 	@Setter(AccessLevel.PACKAGE)
 	private SubscriptionFilterMode subscriptionFilterMode;
 	@Setter(AccessLevel.PACKAGE)
@@ -82,17 +81,7 @@ class WorldSwitcherPanel extends PluginPanel
 	@Setter(AccessLevel.PACKAGE)
 	private Set<WorldTypeFilter> worldTypeFilters;
 
-	@Setter(AccessLevel.PACKAGE)
-	private Boolean twelveHourFormat;
-
-	@Setter(AccessLevel.PACKAGE)
-	private int pingFilter;
-
-	@Setter(AccessLevel.PACKAGE)
-	private Set<SkillTotalFilter> skillTotalFilters;
-
-
-	WorldSwitcherPanel(WorldFinderPlugin plugin)
+	WorldSwitcherPanel(WorldHopperPlugin plugin)
 	{
 		this.plugin = plugin;
 
@@ -205,7 +194,7 @@ class WorldSwitcherPanel extends PluginPanel
 				case WORLD:
 					return getCompareValue(r1, r2, row -> row.getWorld().getId());
 				case PLAYERS:
-					return getCompareValue(r1, r2, WorldTableRow::getUpdatedPlayerCount);
+					return getCompareValue(r1, r2, WorldTableRow::getPlayerCount);
 				case ACTIVITY:
 					// Leave empty activity worlds on the bottom of the list
 					return getCompareValue(r1, r2, row ->
@@ -213,12 +202,8 @@ class WorldSwitcherPanel extends PluginPanel
 						String activity = row.getWorld().getActivity();
 						return !activity.equals("-") ? activity : null;
 					});
-				case TIMER:
-					// Leave worlds with no timestamp at the top
-					return getCompareValue(r1, r2, row -> {
-						Long timer = row.getTimer();
-						return timer != null ? timer : 0;
-					});
+				case TIME: // World Finder: never-visited worlds sort as oldest
+					return getCompareValue(r1, r2, row -> row.getLastVisited() != null ? row.getLastVisited() : 0L);
 				default:
 					return 0;
 			}
@@ -266,7 +251,7 @@ class WorldSwitcherPanel extends PluginPanel
 		}
 	}
 
-	void populate(List<World> worlds)
+	void populate(List<World> worlds, @Nullable EnumComposition worldLocations)
 	{
 		rows.clear();
 
@@ -290,7 +275,7 @@ class WorldSwitcherPanel extends PluginPanel
 					break;
 			}
 
-			if (!regionFilterMode.isEmpty() && !regionFilterMode.contains(RegionFilterMode.of(world.getRegion())))
+			if (!regionFilterMode.isEmpty() && world.getRegion() != null && !regionFilterMode.contains(RegionFilterMode.of(world.getRegion())))
 			{
 				continue;
 			}
@@ -308,41 +293,15 @@ class WorldSwitcherPanel extends PluginPanel
 				}
 			}
 
-			// Filter worlds by ping from config, if it's not 0
-			if (pingFilter != 0)
+			if (plugin.getWorldFinder().isFiltered(world)) // World Finder
 			{
-				Integer ping = plugin.getStoredPing(world);
-				if (ping == null || ping > pingFilter)
-				{
-					// Filter out worlds with ping higher than config threshold
-					continue;
-				}
+				continue;
 			}
 
-			// Filter by skill total
-			if (!skillTotalFilters.isEmpty())
-			{
-				String activity = world.getActivity();
-				if (activity.contains("skill total")) // if it's a skill total check if its being filtered
-				{
-					boolean filter = true;
-					for (SkillTotalFilter skillTotalFilter : skillTotalFilters)
-					{
-						if (activity.equals(skillTotalFilter.getSkillTotal()))
-						{
-							filter = false;
-							break;
-						}
-					}
-					if (filter)
-					{
-						continue;
-					}
-				}
-			}
-
-			// populate row
-			rows.add(buildRow(world, i % 2 == 0, world.getId() == plugin.getCurrentWorld() && plugin.getLastWorld() != 0, plugin.isFavorite(world), twelveHourFormat));
+			rows.add(buildRow(world, i % 2 == 0,
+				world.getId() == plugin.getCurrentWorld() && plugin.getLastWorld() != 0,
+				plugin.isFavorite(world),
+				worldLocations != null ? worldLocations.getIntValue(world.getId()) : -1));
 		}
 
 		updateList();
@@ -354,7 +313,7 @@ class WorldSwitcherPanel extends PluginPanel
 		worldHeader.highlight(false, ascendingOrder);
 		playersHeader.highlight(false, ascendingOrder);
 		activityHeader.highlight(false, ascendingOrder);
-		timerHeader.highlight(false, ascendingOrder);
+		timeHeader.highlight(false, ascendingOrder); // World Finder
 
 		switch (order)
 		{
@@ -370,8 +329,8 @@ class WorldSwitcherPanel extends PluginPanel
 			case ACTIVITY:
 				activityHeader.highlight(true, ascendingOrder);
 				break;
-			case TIMER:
-				timerHeader.highlight(true, ascendingOrder);
+			case TIME: // World Finder
+				timeHeader.highlight(true, ascendingOrder);
 				break;
 		}
 
@@ -451,9 +410,10 @@ class WorldSwitcherPanel extends PluginPanel
 			}
 		});
 
-		timerHeader = new WorldTableHeader("Time", orderIndex == WorldOrder.TIMER, ascendingOrder, plugin::refresh);
-		timerHeader.setPreferredSize(new Dimension(TIMER_COLUMN_WIDTH, 0));
-		timerHeader.addMouseListener(new MouseAdapter()
+		// World Finder: "last visited" column
+		timeHeader = new WorldTableHeader("Time", orderIndex == WorldOrder.TIME, ascendingOrder, plugin::refresh);
+		timeHeader.setPreferredSize(new Dimension(TIME_COLUMN_WIDTH, 0));
+		timeHeader.addMouseListener(new MouseAdapter()
 		{
 			@Override
 			public void mousePressed(MouseEvent mouseEvent)
@@ -462,14 +422,14 @@ class WorldSwitcherPanel extends PluginPanel
 				{
 					return;
 				}
-				ascendingOrder = orderIndex != WorldOrder.TIMER || !ascendingOrder;
-				orderBy(WorldOrder.TIMER);
+				ascendingOrder = orderIndex != WorldOrder.TIME || !ascendingOrder;
+				orderBy(WorldOrder.TIME);
 			}
 		});
 
 		leftSide.add(worldHeader, BorderLayout.WEST);
 		leftSide.add(playersHeader, BorderLayout.CENTER);
-		leftSide.add(timerHeader, BorderLayout.EAST);
+		leftSide.add(timeHeader, BorderLayout.EAST); // World Finder
 
 		rightSide.add(activityHeader, BorderLayout.CENTER);
 		rightSide.add(pingHeader, BorderLayout.EAST);
@@ -480,38 +440,31 @@ class WorldSwitcherPanel extends PluginPanel
 		return header;
 	}
 
-	private long lastHoppedAt = 0;
-
 	/**
 	 * Builds a table row, that displays the world's information.
 	 */
-	private WorldTableRow buildRow(World world, boolean stripe, boolean current, boolean favorite, boolean twelveHourFormat)
+	private WorldTableRow buildRow(World world, boolean stripe, boolean current, boolean favorite, int worldLocation)
 	{
-		WorldTableRow row = new WorldTableRow(world, current, favorite, twelveHourFormat, plugin.getStoredPing(world), plugin.getTimer(world.getId()),
-			world1 -> {
-				long now = System.currentTimeMillis();
-				if ( now - lastHoppedAt < 500 ) // 500ms Debounce on the hop
-				{
-					return;
-				}
-				lastHoppedAt = now;
-				plugin.hopTo(world1);
-			},
-			(world12, add) ->
+		WorldTableRow row = new WorldTableRow(world, current, favorite, plugin.getStoredPing(world),
+			plugin::hopTo,
+			(w, add) ->
 			{
 				if (add)
 				{
-					plugin.addToFavorites(world12);
+					plugin.addToFavorites(w);
 				}
 				else
 				{
-					plugin.removeFromFavorites(world12);
+					plugin.removeFromFavorites(w);
 				}
 
 				updateList();
-			}
+			},
+			worldLocation
 		);
 		row.setBackground(stripe ? ODD_ROW : ColorScheme.DARK_GRAY_COLOR);
+		Long lastVisited = plugin.getWorldFinder().getLastVisited(world.getId()); // World Finder
+		row.setLastVisited(lastVisited, plugin.getWorldFinder().formatLastVisited(lastVisited));
 		return row;
 	}
 
@@ -524,6 +477,6 @@ class WorldSwitcherPanel extends PluginPanel
 		PLAYERS,
 		ACTIVITY,
 		PING,
-		TIMER
+		TIME // World Finder
 	}
 }
