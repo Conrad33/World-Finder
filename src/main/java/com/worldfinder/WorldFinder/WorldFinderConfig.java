@@ -1,3 +1,28 @@
+/*
+ * Copyright (c) 2018, Lotto <https://github.com/devLotto>
+ * Copyright (c) 2019, gregg1494 <https://github.com/gregg1494>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package com.worldfinder.WorldFinder;
 
 import java.awt.event.InputEvent;
@@ -9,7 +34,7 @@ import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.Keybind;
 
-@ConfigGroup("worldfinder")
+@ConfigGroup(WorldFinderConfig.GROUP)
 public interface WorldFinderConfig extends Config
 {
 	String GROUP = "worldfinder";
@@ -17,7 +42,7 @@ public interface WorldFinderConfig extends Config
 	@ConfigItem(
 		keyName = "previousKey",
 		name = "Quick-hop previous",
-		description = "When you press this key you'll hop to the previous world",
+		description = "When you press this key you'll hop to the previous world.",
 		position = 0
 	)
 	default Keybind previousKey()
@@ -28,7 +53,7 @@ public interface WorldFinderConfig extends Config
 	@ConfigItem(
 		keyName = "nextKey",
 		name = "Quick-hop next",
-		description = "When you press this key you'll hop to the next world",
+		description = "When you press this key you'll hop to the next world.",
 		position = 1
 	)
 	default Keybind nextKey()
@@ -38,8 +63,8 @@ public interface WorldFinderConfig extends Config
 
 	@ConfigItem(
 		keyName = "quickhopOutOfDanger",
-		name = "Quick-hop avoid dangerous",
-		description = "Don't hop to a PVP/high risk world when quick-hopping",
+		name = "Quick-hop out of dangerous worlds",
+		description = "Don't hop to a PvP/high risk world when quick-hopping.",
 		position = 2
 	)
 	default boolean quickhopOutOfDanger()
@@ -50,7 +75,7 @@ public interface WorldFinderConfig extends Config
 	@ConfigItem(
 		keyName = "showSidebar",
 		name = "Show world switcher sidebar",
-		description = "Show sidebar containing all worlds that mimics in-game interface",
+		description = "Show sidebar containing all worlds that mimics in-game interface.",
 		position = 4
 	)
 	default boolean showSidebar()
@@ -61,7 +86,7 @@ public interface WorldFinderConfig extends Config
 	@ConfigItem(
 		keyName = "ping",
 		name = "Show world ping",
-		description = "Shows ping to each game world",
+		description = "Shows ping to each game world.",
 		position = 5
 	)
 	default boolean ping()
@@ -72,7 +97,7 @@ public interface WorldFinderConfig extends Config
 	@ConfigItem(
 		keyName = "showMessage",
 		name = "Show world hop message in chat",
-		description = "Shows what world is being hopped to in the chat",
+		description = "Shows what world is being hopped to in the chat.",
 		position = 6
 	)
 	default boolean showWorldHopMessage()
@@ -82,8 +107,8 @@ public interface WorldFinderConfig extends Config
 
 	@ConfigItem(
 		keyName = "menuOption",
-		name = "Show Hop-to menu option",
-		description = "Adds Hop-to menu option to the friends list and friends chat members list",
+		name = "Show hop-to menu option",
+		description = "Adds Hop-to menu option to the friends list and friends chat members list.",
 		position = 7
 	)
 	default boolean menuOption()
@@ -94,7 +119,7 @@ public interface WorldFinderConfig extends Config
 	@ConfigItem(
 		keyName = "subscriptionFilter",
 		name = "Subscription filter",
-		description = "Only show free worlds, member worlds, or both types of worlds in sidebar",
+		description = "Only show free worlds, member worlds, or both types of worlds in sidebar.",
 		position = 8
 	)
 	default SubscriptionFilterMode subscriptionFilter()
@@ -105,7 +130,7 @@ public interface WorldFinderConfig extends Config
 	@ConfigItem(
 		keyName = "regionFilter",
 		name = "Region filter",
-		description = "Only show worlds in specific regions (ctrl+click to choose multiple)",
+		description = "Only show and quick-hop to worlds in specific regions.",
 		position = 9
 	)
 	default Set<RegionFilterMode> regionFilter()
@@ -116,7 +141,7 @@ public interface WorldFinderConfig extends Config
 	@ConfigItem(
 		keyName = "worldTypeFilter",
 		name = "World type filter",
-		description = "Only show worlds of specific types (ctrl+click to choose multiple)",
+		description = "Only show worlds of specific types.",
 		position = 10
 	)
 	default Set<WorldTypeFilter> worldTypeFilter()
@@ -125,21 +150,10 @@ public interface WorldFinderConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "skillTotalFilter",
-		name = "Skill Total filter",
-		description = "Only show worlds of skill total (ctrl+click to choose multiple)",
-		position = 11
-	)
-	default Set<SkillTotalFilter> skillTotalFilter()
-	{
-		return Collections.emptySet();
-	}
-
-	@ConfigItem(
 		keyName = "displayPing",
 		name = "Display current ping",
-		description = "Displays ping to current game world",
-		position = 12
+		description = "Displays ping to current game world.",
+		position = 11
 	)
 	default boolean displayPing()
 	{
@@ -147,24 +161,24 @@ public interface WorldFinderConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "skillTotalFilter",
+		name = "Skill total filter",
+		description = "Only show and quick-hop to these skill total worlds (other worlds are unaffected). Select only None to hide all skill total worlds.",
+		position = 12
+	)
+	default Set<SkillTotalFilter> skillTotalFilter()
+	{
+		return Collections.emptySet();
+	}
+
+	@ConfigItem(
 		keyName = "twelveHourTime",
-		name = "12 Hour Time",
-		description = "Show time in 12 hour format.",
+		name = "12 hour time",
+		description = "Show the last visited time in 12 hour format.",
 		position = 13
 	)
 	default boolean twelveHourTime()
 	{
 		return false;
-	}
-
-	@ConfigItem(
-		keyName = "pingFilter",
-		name = "Max Ping Filter",
-		description = "Filter worlds with ping greater than... (0 is no filter)",
-		position = 14
-	)
-	default int pingFilter()
-	{
-		return 0;
 	}
 }
