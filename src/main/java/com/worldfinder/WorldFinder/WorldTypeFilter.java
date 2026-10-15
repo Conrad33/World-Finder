@@ -36,7 +36,7 @@ enum WorldTypeFilter
 			@Override
 			boolean matches(Set<WorldType> types)
 			{
-				EnumSet<WorldType> normal = EnumSet.of(WorldType.MEMBERS, WorldType.LAST_MAN_STANDING, WorldType.SKILL_TOTAL);
+				EnumSet<WorldType> normal = EnumSet.of(WorldType.MEMBERS, WorldType.SKILL_TOTAL, WorldType.LAST_MAN_STANDING);
 				EnumSet<WorldType> inverse = EnumSet.complementOf(normal);
 				return Sets.intersection(types, inverse).isEmpty();
 			}
@@ -54,7 +54,7 @@ enum WorldTypeFilter
 			@Override
 			boolean matches(Set<WorldType> types)
 			{
-				return types.contains(WorldType.SEASONAL);
+				return types.contains(WorldType.SEASONAL) || types.contains(WorldType.TOURNAMENT);
 			}
 		},
 	QUEST_SPEEDRUNNING
@@ -81,12 +81,12 @@ enum WorldTypeFilter
 				return types.contains(WorldType.PVP);
 			}
 		},
-	TARGET
+	SKILL_TOTAL
 		{
 			@Override
 			boolean matches(Set<WorldType> types)
 			{
-				return types.contains(WorldType.BOUNTY);
+				return types.contains(WorldType.SKILL_TOTAL);
 			}
 		},
 	HIGH_RISK
@@ -97,12 +97,12 @@ enum WorldTypeFilter
 				return types.contains(WorldType.HIGH_RISK) && !types.contains(WorldType.PVP);
 			}
 		},
-	SKILL_TOTAL
+	BOUNTY_HUNTER
 		{
 			@Override
 			boolean matches(Set<WorldType> types)
 			{
-				return types.contains(WorldType.SKILL_TOTAL);
+				return types.contains(WorldType.BOUNTY);
 			}
 		};
 

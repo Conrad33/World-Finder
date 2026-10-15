@@ -25,21 +25,16 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
- /*
-	This plugin is a modified version of the default RuneLite world hopper plugin: https://github.com/runelite/runelite/wiki/World-Hopper
-	It adds a column which keeps track of the latest time a server was logged in at. This makes it easy to sort by
-	worlds which haven't been hopped to in a long time. This is nice for finding free worlds at bosses and stuff.
-
-	Also supports party plugin to keep track of what worlds the party has checked.
- */
-
+// Based on RuneLite's World Hopper plugin at runelite/runelite@f21dbb37bc0a01ab0920343fc538fb4c103d6106
 package com.worldfinder.WorldFinder;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableList;
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
+import java.io.FileDescriptor;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -64,7 +59,7 @@ import net.runelite.api.FriendsChatMember;
 import net.runelite.api.GameState;
 import net.runelite.api.MenuAction;
 import net.runelite.api.NameableContainer;
-import net.runelite.api.Varbits;
+import net.runelite.api.Skill;
 import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.clan.ClanChannelMember;
 import net.runelite.api.events.ChatMessage;
@@ -74,8 +69,8 @@ import net.runelite.api.events.GameTick;
 import net.runelite.api.events.MenuEntryAdded;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WorldListLoad;
-import net.runelite.api.widgets.ComponentID;
-import net.runelite.api.widgets.InterfaceID;
+import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.api.widgets.WidgetUtil;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.chat.ChatColorType;
@@ -88,11 +83,11 @@ import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.events.WorldsFetch;
 import net.runelite.client.game.WorldService;
 import net.runelite.client.input.KeyManager;
-import net.runelite.client.party.PartyService;
-import net.runelite.client.party.WSClient;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.worldhopper.ping.Ping;
+import net.runelite.client.plugins.worldhopper.ping.RetransmitCalculator;
+import net.runelite.client.plugins.worldhopper.ping.TCPInfo;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.overlay.OverlayManager;
@@ -149,16 +144,14 @@ public class WorldFinderPlugin extends Plugin
 	private OverlayManager overlayManager;
 
 	@Inject
-	private WorldHopperPingOverlay worldHopperOverlay;
+	private WorldFinderPingOverlay worldFinderOverlay;
 
 	@Inject
 	private WorldService worldService;
 
 	@Inject
-	private PartyService partyService;
-
-	@Inject
-	private WSClient wsClient;
+	@Getter(AccessLevel.PACKAGE)
+	private WorldFinderExtension worldFinder;
 
 	private ScheduledExecutorService hopperExecutorService;
 
@@ -181,8 +174,8 @@ public class WorldFinderPlugin extends Plugin
 	private int currentPing;
 
 	private final Map<Integer, Integer> storedPings = new HashMap<>();
-	private final Map<Integer, Long> storedTimers = new HashMap<>();
 
+	final RetransmitCalculator retransmitCalculator = new RetransmitCalculator();
 
 	private final HotkeyListener previousKeyListener = new HotkeyListener(() -> config.previousKey())
 	{
@@ -210,16 +203,15 @@ public class WorldFinderPlugin extends Plugin
 	@Override
 	protected void startUp() throws Exception
 	{
-		wsClient.registerMessage(WorldTimerUpdate.class);
-
 		currentPing = -1;
+		worldFinder.startUp(this::updateList);
 
 		keyManager.registerKeyListener(previousKeyListener);
 		keyManager.registerKeyListener(nextKeyListener);
 
 		panel = new WorldSwitcherPanel(this);
 
-		BufferedImage icon = ImageUtil.loadImageResource(getClass(), "/world_finder_icon.png");
+		BufferedImage icon = ImageUtil.loadImageResource(WorldFinderPlugin.class, "icon.png");
 		navButton = NavigationButton.builder()
 			.tooltip("World Finder")
 			.icon(icon)
@@ -232,14 +224,11 @@ public class WorldFinderPlugin extends Plugin
 			clientToolbar.addNavigation(navButton);
 		}
 
-		overlayManager.add(worldHopperOverlay);
+		overlayManager.add(worldFinderOverlay);
 
 		panel.setSubscriptionFilterMode(config.subscriptionFilter());
 		panel.setRegionFilterMode(config.regionFilter());
 		panel.setWorldTypeFilters(config.worldTypeFilter());
-		panel.setTwelveHourFormat(config.twelveHourTime());
-		panel.setPingFilter(config.pingFilter());
-		panel.setSkillTotalFilters(config.skillTotalFilter());
 
 		// The plugin has its own executor for pings, as it blocks for a long time
 		hopperExecutorService = new ExecutorServiceExceptionLogger(Executors.newSingleThreadScheduledExecutor());
@@ -256,15 +245,13 @@ public class WorldFinderPlugin extends Plugin
 	@Override
 	protected void shutDown() throws Exception
 	{
-		wsClient.unregisterMessage(WorldTimerUpdate.class);
-
 		pingFuture.cancel(true);
 		pingFuture = null;
 
 		currPingFuture.cancel(true);
 		currPingFuture = null;
 
-		overlayManager.remove(worldHopperOverlay);
+		overlayManager.remove(worldFinderOverlay);
 
 		keyManager.unregisterKeyListener(previousKeyListener);
 		keyManager.unregisterKeyListener(nextKeyListener);
@@ -273,6 +260,8 @@ public class WorldFinderPlugin extends Plugin
 
 		hopperExecutorService.shutdown();
 		hopperExecutorService = null;
+
+		worldFinder.shutDown();
 	}
 
 	@Subscribe
@@ -314,16 +303,8 @@ public class WorldFinderPlugin extends Plugin
 					panel.setWorldTypeFilters(config.worldTypeFilter());
 					updateList();
 					break;
-				case "twelveHourTime":
-					panel.setTwelveHourFormat(config.twelveHourTime());
-					updateList();
-					break;
-				case "pingFilter":
-					panel.setPingFilter(config.pingFilter());
-					updateList();
-					break;
 				case "skillTotalFilter":
-					panel.setSkillTotalFilters(config.skillTotalFilter());
+				case "twelveHourTime":
 					updateList();
 					break;
 			}
@@ -333,7 +314,7 @@ public class WorldFinderPlugin extends Plugin
 	@Subscribe
 	public void onCommandExecuted(CommandExecuted commandExecuted)
 	{
-		if ("hop".equals(commandExecuted.getCommand()))
+		if ("hop".equalsIgnoreCase(commandExecuted.getCommand()))
 		{
 			int worldNumber;
 			try
@@ -408,11 +389,11 @@ public class WorldFinderPlugin extends Plugin
 	@Subscribe
 	public void onVarbitChanged(VarbitChanged varbitChanged)
 	{
-		if (varbitChanged.getVarbitId() == Varbits.WORLDHOPPER_FAVORITE_1
-			|| varbitChanged.getVarbitId() == Varbits.WORLDHOPPER_FAVORITE_2)
+		if (varbitChanged.getVarbitId() == VarbitID.WORLDSWITCHER_FAVOURITE_1
+			|| varbitChanged.getVarbitId() == VarbitID.WORLDSWITCHER_FAVOURITE_2)
 		{
-			favoriteWorld1 = client.getVarbitValue(Varbits.WORLDHOPPER_FAVORITE_1);
-			favoriteWorld2 = client.getVarbitValue(Varbits.WORLDHOPPER_FAVORITE_2);
+			favoriteWorld1 = client.getVarbitValue(VarbitID.WORLDSWITCHER_FAVOURITE_1);
+			favoriteWorld2 = client.getVarbitValue(VarbitID.WORLDSWITCHER_FAVOURITE_2);
 			SwingUtilities.invokeLater(panel::updateList);
 		}
 	}
@@ -429,8 +410,8 @@ public class WorldFinderPlugin extends Plugin
 		int groupId = WidgetUtil.componentToInterface(componentId);
 		String option = event.getOption();
 
-		if (groupId == InterfaceID.FRIEND_LIST || groupId == InterfaceID.FRIENDS_CHAT
-			|| componentId == ComponentID.CLAN_MEMBERS || componentId == ComponentID.CLAN_GUEST_MEMBERS)
+		if (groupId == InterfaceID.FRIENDS || groupId == InterfaceID.CHATCHANNEL_CURRENT
+			|| componentId == InterfaceID.ClansSidepanel.PLAYERLIST || componentId == InterfaceID.ClansGuestSidepanel.PLAYERLIST)
 		{
 			boolean after;
 
@@ -485,31 +466,21 @@ public class WorldFinderPlugin extends Plugin
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged gameStateChanged)
 	{
-		// If the player has disabled the side bar plugin panel, do not update the UI
-		if (config.showSidebar() && gameStateChanged.getGameState() == GameState.LOGGED_IN)
+		if (gameStateChanged.getGameState() == GameState.LOGGED_IN)
 		{
 			if (lastWorld != client.getWorld())
 			{
 				int newWorld = client.getWorld();
-				setTimer(lastWorld); // update the timestamp of the last world, when hopping off
-				setTimer(newWorld); // update the timestamp of the current world, when hopping onto
-				if (partyService.isInParty())
+				// If the player has disabled the side bar plugin panel, do not update the UI
+				if (config.showSidebar())
 				{
-					partyService.send(new WorldTimerUpdate(lastWorld, getTimer(lastWorld)));
-					partyService.send(new WorldTimerUpdate(newWorld, getTimer(newWorld)));
+					panel.switchCurrentHighlight(newWorld, lastWorld);
 				}
-				panel.switchCurrentHighlight(newWorld, lastWorld);
+				currentPing = -1;
+				worldFinder.onWorldChanged(lastWorld, newWorld);
 				lastWorld = newWorld;
-				updateList(); // and then redraw
 			}
 		}
-	}
-
-	@Subscribe
-	public void onWorldTimerUpdate(WorldTimerUpdate update)
-	{
-		storedTimers.put(update.getWorldId(), update.getTimeStamp());
-		updateList();
 	}
 
 	@Subscribe
@@ -558,7 +529,17 @@ public class WorldFinderPlugin extends Plugin
 		WorldResult worldResult = worldService.getWorlds();
 		if (worldResult != null)
 		{
-			SwingUtilities.invokeLater(() -> panel.populate(worldResult.getWorlds()));
+			clientThread.invokeLater(() ->
+			{
+				if (client.getGameState().getState() < GameState.LOGIN_SCREEN.getState())
+				{
+					return false;
+				}
+
+				var locationEnum = client.getEnum(EnumID.WORLD_LOCATIONS);
+				SwingUtilities.invokeLater(() -> panel.populate(worldResult.getWorlds(), locationEnum));
+				return true;
+			});
 		}
 	}
 
@@ -593,6 +574,10 @@ public class WorldFinderPlugin extends Plugin
 
 		int worldIdx = worlds.indexOf(currentWorld);
 		int totalLevel = client.getTotalLevel();
+		final int f2pTotalLevel = Arrays.stream(Skill.values())
+			.filter(skill -> !skill.isMembers())
+			.mapToInt(client::getRealSkillLevel)
+			.sum();
 
 		final Set<RegionFilterMode> regionFilter = config.regionFilter();
 
@@ -627,7 +612,12 @@ public class WorldFinderPlugin extends Plugin
 			world = worlds.get(worldIdx);
 
 			// Check world region if filter is enabled
-			if (!regionFilter.isEmpty() && !regionFilter.contains(RegionFilterMode.of(world.getRegion())))
+			if (!regionFilter.isEmpty() && world.getRegion() != null && !regionFilter.contains(RegionFilterMode.of(world.getRegion())))
+			{
+				continue;
+			}
+
+			if (worldFinder.isFiltered(world))
 			{
 				continue;
 			}
@@ -644,7 +634,12 @@ public class WorldFinderPlugin extends Plugin
 				{
 					int totalRequirement = Integer.parseInt(world.getActivity().substring(0, world.getActivity().indexOf(" ")));
 
-					if (totalLevel >= totalRequirement)
+					// F2P total level worlds only count the total level of your non-members skills, so it is possible
+					// to have a total level in excess of the world's level requirement (even without having trained
+					// members skills) and not fulfill that requirement
+					final int effectiveTotalLevel = types.contains(WorldType.MEMBERS) ? totalLevel : f2pTotalLevel;
+
+					if (effectiveTotalLevel >= totalRequirement)
 					{
 						types.remove(WorldType.SKILL_TOTAL);
 					}
@@ -679,7 +674,7 @@ public class WorldFinderPlugin extends Plugin
 		{
 			String chatMessage = new ChatMessageBuilder()
 				.append(ChatColorType.NORMAL)
-				.append("Couldn't find a world to quick-hop to. Check the World Finder panel to see if too many worlds are being filtered.")
+				.append("Couldn't find a world to quick-hop to.")
 				.build();
 
 			chatMessageManager.queue(QueuedMessage.builder()
@@ -721,13 +716,18 @@ public class WorldFinderPlugin extends Plugin
 		rsWorld.setAddress(world.getAddress());
 		rsWorld.setId(world.getId());
 		rsWorld.setPlayerCount(world.getPlayers());
-		rsWorld.setLocation(world.getLocation());
+		rsWorld.setLocation(world.getRegion().getId());
 		rsWorld.setTypes(WorldUtil.toWorldTypes(world.getTypes()));
 
 		if (client.getGameState() == GameState.LOGIN_SCREEN)
 		{
 			// on the login screen we can just change the world by ourselves
 			client.changeWorld(rsWorld);
+			return;
+		}
+
+		if (worldFinder.isHopInProgress())
+		{
 			return;
 		}
 
@@ -761,7 +761,7 @@ public class WorldFinderPlugin extends Plugin
 			return;
 		}
 
-		if (client.getWidget(ComponentID.WORLD_SWITCHER_WORLD_LIST) == null)
+		if (client.getWidget(InterfaceID.Worldswitcher.BUTTONS) == null)
 		{
 			client.openWorldHopper();
 
@@ -788,6 +788,7 @@ public class WorldFinderPlugin extends Plugin
 		else
 		{
 			client.hopToWorld(quickHopTargetWorld);
+			worldFinder.onHopSent();
 			resetQuickHopper();
 		}
 	}
@@ -872,7 +873,7 @@ public class WorldFinderPlugin extends Plugin
 
 		for (World world : worldResult.getWorlds())
 		{
-			int ping = ping(world);
+			int ping = ping(world, false);
 			SwingUtilities.invokeLater(() -> panel.updatePing(world.getId(), ping));
 		}
 
@@ -913,7 +914,7 @@ public class WorldFinderPlugin extends Plugin
 			return;
 		}
 
-		int ping = ping(world);
+		int ping = ping(world, false);
 		log.trace("Ping for world {} is: {}", world.getId(), ping);
 
 		if (panel.isActive())
@@ -937,12 +938,30 @@ public class WorldFinderPlugin extends Plugin
 		final World currentWorld = worldResult.findWorld(client.getWorld());
 		if (currentWorld == null)
 		{
-			log.debug("unable to find current world: {}", client.getWorld());
+			log.trace("unable to find current world: {}", client.getWorld());
 			return;
 		}
 
-		int ping = ping(currentWorld);
-		log.trace("Ping for current world is: {}", currentPing);
+		int ping = ping(currentWorld, true);
+		log.trace("Ping for current world is: {}", ping);
+
+		FileDescriptor fd = client.getSocketFD();
+		int rtt = -1;
+		if (fd != null)
+		{
+			TCPInfo tcpInfo = Ping.getTCPInfo(fd);
+			if (tcpInfo != null)
+			{
+				rtt = (int) (tcpInfo.getRTT() / 1000L);
+				retransmitCalculator.record(tcpInfo);
+			}
+		}
+
+		if (ping < 0)
+		{
+			ping = rtt; // use rtt for ping if icmp is blocked
+			storedPings.put(currentWorld.getId(), rtt);
+		}
 
 		if (ping < 0)
 		{
@@ -967,22 +986,10 @@ public class WorldFinderPlugin extends Plugin
 		return storedPings.get(world.getId());
 	}
 
-	private int ping(World world)
+	private int ping(World world, boolean isCurrentWorld)
 	{
-		int ping = Ping.ping(world);
+		int ping = Ping.ping(world, !isCurrentWorld);
 		storedPings.put(world.getId(), ping);
 		return ping;
-	}
-
-	Long getTimer(int worldId)
-	{
-		return storedTimers.get(worldId);
-	}
-
-	private Long setTimer(int worldId)
-	{
-		long timeStamp = Instant.now().getEpochSecond() * 1000;
-		storedTimers.put(worldId, timeStamp);
-		return timeStamp;
 	}
 }
