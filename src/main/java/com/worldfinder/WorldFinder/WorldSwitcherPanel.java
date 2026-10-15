@@ -56,7 +56,7 @@ class WorldSwitcherPanel extends PluginPanel
 	private static final int WORLD_COLUMN_WIDTH = 60;
 	private static final int PLAYERS_COLUMN_WIDTH = 40;
 	private static final int PING_COLUMN_WIDTH = 47;
-	private static final int TIME_COLUMN_WIDTH = 40; // World Finder
+	private static final int TIME_COLUMN_WIDTH = 40;
 
 	private final JPanel listContainer = new JPanel();
 
@@ -67,13 +67,13 @@ class WorldSwitcherPanel extends PluginPanel
 	private WorldTableHeader playersHeader;
 	private WorldTableHeader activityHeader;
 	private WorldTableHeader pingHeader;
-	private WorldTableHeader timeHeader; // World Finder
+	private WorldTableHeader timeHeader;
 
 	private WorldOrder orderIndex = WorldOrder.WORLD;
 	private boolean ascendingOrder = true;
 
 	private final ArrayList<WorldTableRow> rows = new ArrayList<>();
-	private final WorldHopperPlugin plugin;
+	private final WorldFinderPlugin plugin;
 	@Setter(AccessLevel.PACKAGE)
 	private SubscriptionFilterMode subscriptionFilterMode;
 	@Setter(AccessLevel.PACKAGE)
@@ -81,7 +81,7 @@ class WorldSwitcherPanel extends PluginPanel
 	@Setter(AccessLevel.PACKAGE)
 	private Set<WorldTypeFilter> worldTypeFilters;
 
-	WorldSwitcherPanel(WorldHopperPlugin plugin)
+	WorldSwitcherPanel(WorldFinderPlugin plugin)
 	{
 		this.plugin = plugin;
 
@@ -202,7 +202,7 @@ class WorldSwitcherPanel extends PluginPanel
 						String activity = row.getWorld().getActivity();
 						return !activity.equals("-") ? activity : null;
 					});
-				case TIME: // World Finder: never-visited worlds sort as oldest
+				case TIME:
 					return getCompareValue(r1, r2, row -> row.getLastVisited() != null ? row.getLastVisited() : 0L);
 				default:
 					return 0;
@@ -293,7 +293,7 @@ class WorldSwitcherPanel extends PluginPanel
 				}
 			}
 
-			if (plugin.getWorldFinder().isFiltered(world)) // World Finder
+			if (plugin.getWorldFinder().isFiltered(world))
 			{
 				continue;
 			}
@@ -313,7 +313,7 @@ class WorldSwitcherPanel extends PluginPanel
 		worldHeader.highlight(false, ascendingOrder);
 		playersHeader.highlight(false, ascendingOrder);
 		activityHeader.highlight(false, ascendingOrder);
-		timeHeader.highlight(false, ascendingOrder); // World Finder
+		timeHeader.highlight(false, ascendingOrder);
 
 		switch (order)
 		{
@@ -329,7 +329,7 @@ class WorldSwitcherPanel extends PluginPanel
 			case ACTIVITY:
 				activityHeader.highlight(true, ascendingOrder);
 				break;
-			case TIME: // World Finder
+			case TIME:
 				timeHeader.highlight(true, ascendingOrder);
 				break;
 		}
@@ -410,7 +410,6 @@ class WorldSwitcherPanel extends PluginPanel
 			}
 		});
 
-		// World Finder: "last visited" column
 		timeHeader = new WorldTableHeader("Time", orderIndex == WorldOrder.TIME, ascendingOrder, plugin::refresh);
 		timeHeader.setPreferredSize(new Dimension(TIME_COLUMN_WIDTH, 0));
 		timeHeader.addMouseListener(new MouseAdapter()
@@ -429,7 +428,7 @@ class WorldSwitcherPanel extends PluginPanel
 
 		leftSide.add(worldHeader, BorderLayout.WEST);
 		leftSide.add(playersHeader, BorderLayout.CENTER);
-		leftSide.add(timeHeader, BorderLayout.EAST); // World Finder
+		leftSide.add(timeHeader, BorderLayout.EAST);
 
 		rightSide.add(activityHeader, BorderLayout.CENTER);
 		rightSide.add(pingHeader, BorderLayout.EAST);
@@ -463,7 +462,7 @@ class WorldSwitcherPanel extends PluginPanel
 			worldLocation
 		);
 		row.setBackground(stripe ? ODD_ROW : ColorScheme.DARK_GRAY_COLOR);
-		Long lastVisited = plugin.getWorldFinder().getLastVisited(world.getId()); // World Finder
+		Long lastVisited = plugin.getWorldFinder().getLastVisited(world.getId());
 		row.setLastVisited(lastVisited, plugin.getWorldFinder().formatLastVisited(lastVisited));
 		return row;
 	}
@@ -477,6 +476,6 @@ class WorldSwitcherPanel extends PluginPanel
 		PLAYERS,
 		ACTIVITY,
 		PING,
-		TIME // World Finder
+		TIME
 	}
 }

@@ -19,10 +19,6 @@ import net.runelite.client.party.PartyService;
 import net.runelite.client.party.WSClient;
 import net.runelite.http.api.worlds.World;
 
-/**
- * Everything World Finder adds on top of the upstream RuneLite World Hopper plugin.
- * The upstream files only call into this class from hooks marked with "// World Finder".
- */
 @Singleton
 class WorldFinderExtension
 {
@@ -34,7 +30,7 @@ class WorldFinderExtension
 	private Client client;
 
 	@Inject
-	private WorldHopperConfig config;
+	private WorldFinderConfig config;
 
 	@Inject
 	private ConfigManager configManager;
@@ -71,19 +67,15 @@ class WorldFinderExtension
 
 	private void migrateConfig()
 	{
-		// World Finder's old TARGET world type filter is upstream's BOUNTY_HUNTER. Unknown enum names
-		// deserialize to null, which would break the panel, so rename it in place.
-		String worldTypes = configManager.getConfiguration(WorldHopperConfig.GROUP, "worldTypeFilter");
+		// ConfigManager deserializes unknown enum names to null, which breaks WorldTypeFilter matching
+		String worldTypes = configManager.getConfiguration(WorldFinderConfig.GROUP, "worldTypeFilter");
 		if (worldTypes != null && worldTypes.contains("\"TARGET\""))
 		{
-			configManager.setConfiguration(WorldHopperConfig.GROUP, "worldTypeFilter",
+			configManager.setConfiguration(WorldFinderConfig.GROUP, "worldTypeFilter",
 				worldTypes.replace("\"TARGET\"", "\"BOUNTY_HUNTER\""));
 		}
 	}
 
-	/**
-	 * Stamps both the world hopped off of and the world hopped onto, and shares them with the party.
-	 */
 	void onWorldChanged(int fromWorld, int toWorld)
 	{
 		stamp(fromWorld);
@@ -130,9 +122,6 @@ class WorldFinderExtension
 		return format.format(Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()));
 	}
 
-	/**
-	 * @return true if a world should be hidden from the panel and skipped by quick-hop
-	 */
 	boolean isFiltered(World world)
 	{
 		Set<SkillTotalFilter> skillTotals = config.skillTotalFilter();
@@ -145,10 +134,7 @@ class WorldFinderExtension
 		return false;
 	}
 
-	/**
-	 * True from the moment a hop is sent to the server until it has completed (or clearly failed to start).
-	 * Requests made in that window are dropped, otherwise they are queued and fire as a second hop.
-	 */
+	// A hop requested before the current one completes would be queued and fire after landing
 	boolean isHopInProgress()
 	{
 		return hopSentTick >= 0;
@@ -194,7 +180,7 @@ class WorldFinderExtension
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
-		// The server refused the hop (eg. in combat), so stop blocking new ones
+		// The hop never started, e.g. the server refused it during combat
 		if (isHopInProgress() && !hopStarted && client.getTickCount() - hopSentTick > HOP_START_TIMEOUT_TICKS)
 		{
 			clearHop();

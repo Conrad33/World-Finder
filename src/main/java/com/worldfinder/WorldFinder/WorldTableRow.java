@@ -63,7 +63,7 @@ class WorldTableRow extends JPanel
 	private static final int WORLD_COLUMN_WIDTH = 60;
 	private static final int PLAYERS_COLUMN_WIDTH = 40;
 	private static final int PING_COLUMN_WIDTH = 35;
-	private static final int TIME_COLUMN_WIDTH = 40; // World Finder
+	private static final int TIME_COLUMN_WIDTH = 40;
 
 	private static final Color CURRENT_WORLD = new Color(66, 227, 17);
 	private static final Color DANGEROUS_WORLD = new Color(251, 62, 62);
@@ -77,16 +77,16 @@ class WorldTableRow extends JPanel
 
 	static
 	{
-		FLAG_AUS = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_aus.png"));
-		FLAG_UK = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_uk.png"));
-		FLAG_US = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_us.png"));
-		FLAG_US_EAST = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_us_east.png"));
-		FLAG_US_WEST = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_us_west.png"));
-		FLAG_GER = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_ger.png"));
-		FLAG_BR = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_br.png"));
-		FLAG_JP = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_jp.png"));
-		FLAG_SG = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_sg.png"));
-		FLAG_ZA = new ImageIcon(ImageUtil.loadImageResource(WorldHopperPlugin.class, "flag_za.png"));
+		FLAG_AUS = new ImageIcon(ImageUtil.loadImageResource(WorldFinderPlugin.class, "flag_aus.png"));
+		FLAG_UK = new ImageIcon(ImageUtil.loadImageResource(WorldFinderPlugin.class, "flag_uk.png"));
+		FLAG_US = new ImageIcon(ImageUtil.loadImageResource(WorldFinderPlugin.class, "flag_us.png"));
+		FLAG_US_EAST = new ImageIcon(ImageUtil.loadImageResource(WorldFinderPlugin.class, "flag_us_east.png"));
+		FLAG_US_WEST = new ImageIcon(ImageUtil.loadImageResource(WorldFinderPlugin.class, "flag_us_west.png"));
+		FLAG_GER = new ImageIcon(ImageUtil.loadImageResource(WorldFinderPlugin.class, "flag_ger.png"));
+		FLAG_BR = new ImageIcon(ImageUtil.loadImageResource(WorldFinderPlugin.class, "flag_br.png"));
+		FLAG_JP = new ImageIcon(ImageUtil.loadImageResource(WorldFinderPlugin.class, "flag_jp.png"));
+		FLAG_SG = new ImageIcon(ImageUtil.loadImageResource(WorldFinderPlugin.class, "flag_sg.png"));
+		FLAG_ZA = new ImageIcon(ImageUtil.loadImageResource(WorldFinderPlugin.class, "flag_za.png"));
 	}
 
 	private static final int LOCATION_US_WEST = -73;
@@ -105,11 +105,11 @@ class WorldTableRow extends JPanel
 	private JLabel playerCountField;
 	private JLabel activityField;
 	private JLabel pingField;
-	private JLabel timeField; // World Finder
+	private JLabel timeField;
 
 	private int ping;
 	@Getter(AccessLevel.PACKAGE)
-	private Long lastVisited; // World Finder
+	private Long lastVisited;
 
 	private Color lastBackground;
 
@@ -202,7 +202,7 @@ class WorldTableRow extends JPanel
 
 		leftSide.add(worldField, BorderLayout.WEST);
 		leftSide.add(playersField, BorderLayout.CENTER);
-		leftSide.add(buildTimeField(), BorderLayout.EAST); // World Finder
+		leftSide.add(buildTimeField(), BorderLayout.EAST);
 		rightSide.add(activityField, BorderLayout.CENTER);
 		rightSide.add(pingField, BorderLayout.EAST);
 
@@ -243,7 +243,6 @@ class WorldTableRow extends JPanel
 		pingField.setText(ping <= 0 ? "-" : Integer.toString(ping));
 	}
 
-	// World Finder
 	void setLastVisited(Long lastVisited, String text)
 	{
 		this.lastVisited = lastVisited;
@@ -330,7 +329,6 @@ class WorldTableRow extends JPanel
 		return column;
 	}
 
-	// World Finder: "last visited" column
 	private JPanel buildTimeField()
 	{
 		JPanel column = new JPanel(new BorderLayout());

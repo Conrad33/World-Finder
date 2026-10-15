@@ -25,13 +25,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*
- * World Finder: a copy of RuneLite's World Hopper plugin with extra features layered on top.
- * Based on runelite/runelite@f21dbb37bc0a01ab0920343fc538fb4c103d6106
- * (runelite-client/src/main/java/net/runelite/client/plugins/worldhopper).
- * Changes to the upstream files are kept to small hooks marked "// World Finder";
- * the features themselves live in WorldFinderExtension.
- */
+// Based on RuneLite's World Hopper plugin at runelite/runelite@f21dbb37bc0a01ab0920343fc538fb4c103d6106
 package com.worldfinder.WorldFinder;
 
 import com.google.common.base.Stopwatch;
@@ -107,14 +101,13 @@ import net.runelite.http.api.worlds.WorldResult;
 import net.runelite.http.api.worlds.WorldType;
 
 @PluginDescriptor(
-	name = "World Finder", // World Finder
-	configName = "WorldFinderPlugin", // World Finder: keep enabled state separate from the core World Hopper
+	name = "World Finder",
 	description = "Allows you to quickly hop worlds",
 	tags = {"ping", "switcher"},
-	conflicts = {"World Hopper"} // World Finder
+	conflicts = {"World Hopper"}
 )
 @Slf4j
-public class WorldHopperPlugin extends Plugin
+public class WorldFinderPlugin extends Plugin
 {
 	private static final int REFRESH_THROTTLE = 60_000; // ms
 	private static final int MAX_PLAYER_COUNT = 1950;
@@ -145,20 +138,20 @@ public class WorldHopperPlugin extends Plugin
 	private ChatMessageManager chatMessageManager;
 
 	@Inject
-	private WorldHopperConfig config;
+	private WorldFinderConfig config;
 
 	@Inject
 	private OverlayManager overlayManager;
 
 	@Inject
-	private WorldHopperPingOverlay worldHopperOverlay;
+	private WorldFinderPingOverlay worldFinderOverlay;
 
 	@Inject
 	private WorldService worldService;
 
 	@Inject
 	@Getter(AccessLevel.PACKAGE)
-	private WorldFinderExtension worldFinder; // World Finder
+	private WorldFinderExtension worldFinder;
 
 	private ScheduledExecutorService hopperExecutorService;
 
@@ -202,25 +195,25 @@ public class WorldHopperPlugin extends Plugin
 	};
 
 	@Provides
-	WorldHopperConfig getConfig(ConfigManager configManager)
+	WorldFinderConfig getConfig(ConfigManager configManager)
 	{
-		return configManager.getConfig(WorldHopperConfig.class);
+		return configManager.getConfig(WorldFinderConfig.class);
 	}
 
 	@Override
 	protected void startUp() throws Exception
 	{
 		currentPing = -1;
-		worldFinder.startUp(this::updateList); // World Finder
+		worldFinder.startUp(this::updateList);
 
 		keyManager.registerKeyListener(previousKeyListener);
 		keyManager.registerKeyListener(nextKeyListener);
 
 		panel = new WorldSwitcherPanel(this);
 
-		BufferedImage icon = ImageUtil.loadImageResource(WorldHopperPlugin.class, "icon.png");
+		BufferedImage icon = ImageUtil.loadImageResource(WorldFinderPlugin.class, "icon.png");
 		navButton = NavigationButton.builder()
-			.tooltip("World Finder") // World Finder
+			.tooltip("World Finder")
 			.icon(icon)
 			.priority(3)
 			.panel(panel)
@@ -231,7 +224,7 @@ public class WorldHopperPlugin extends Plugin
 			clientToolbar.addNavigation(navButton);
 		}
 
-		overlayManager.add(worldHopperOverlay);
+		overlayManager.add(worldFinderOverlay);
 
 		panel.setSubscriptionFilterMode(config.subscriptionFilter());
 		panel.setRegionFilterMode(config.regionFilter());
@@ -258,7 +251,7 @@ public class WorldHopperPlugin extends Plugin
 		currPingFuture.cancel(true);
 		currPingFuture = null;
 
-		overlayManager.remove(worldHopperOverlay);
+		overlayManager.remove(worldFinderOverlay);
 
 		keyManager.unregisterKeyListener(previousKeyListener);
 		keyManager.unregisterKeyListener(nextKeyListener);
@@ -268,13 +261,13 @@ public class WorldHopperPlugin extends Plugin
 		hopperExecutorService.shutdown();
 		hopperExecutorService = null;
 
-		worldFinder.shutDown(); // World Finder
+		worldFinder.shutDown();
 	}
 
 	@Subscribe
 	public void onConfigChanged(final ConfigChanged event)
 	{
-		if (event.getGroup().equals(WorldHopperConfig.GROUP))
+		if (event.getGroup().equals(WorldFinderConfig.GROUP))
 		{
 			switch (event.getKey())
 			{
@@ -310,7 +303,7 @@ public class WorldHopperPlugin extends Plugin
 					panel.setWorldTypeFilters(config.worldTypeFilter());
 					updateList();
 					break;
-				case "skillTotalFilter": // World Finder
+				case "skillTotalFilter":
 				case "twelveHourTime":
 					updateList();
 					break;
@@ -354,18 +347,18 @@ public class WorldHopperPlugin extends Plugin
 
 	private void setFavoriteConfig(int world)
 	{
-		configManager.setConfiguration(WorldHopperConfig.GROUP, "favorite_" + world, true);
+		configManager.setConfiguration(WorldFinderConfig.GROUP, "favorite_" + world, true);
 	}
 
 	private boolean isFavoriteConfig(int world)
 	{
-		Boolean favorite = configManager.getConfiguration(WorldHopperConfig.GROUP, "favorite_" + world, Boolean.class);
+		Boolean favorite = configManager.getConfiguration(WorldFinderConfig.GROUP, "favorite_" + world, Boolean.class);
 		return favorite != null && favorite;
 	}
 
 	private void clearFavoriteConfig(int world)
 	{
-		configManager.unsetConfiguration(WorldHopperConfig.GROUP, "favorite_" + world);
+		configManager.unsetConfiguration(WorldFinderConfig.GROUP, "favorite_" + world);
 	}
 
 	boolean isFavorite(World world)
@@ -484,7 +477,7 @@ public class WorldHopperPlugin extends Plugin
 					panel.switchCurrentHighlight(newWorld, lastWorld);
 				}
 				currentPing = -1;
-				worldFinder.onWorldChanged(lastWorld, newWorld); // World Finder
+				worldFinder.onWorldChanged(lastWorld, newWorld);
 				lastWorld = newWorld;
 			}
 		}
@@ -624,7 +617,7 @@ public class WorldHopperPlugin extends Plugin
 				continue;
 			}
 
-			if (worldFinder.isFiltered(world)) // World Finder
+			if (worldFinder.isFiltered(world))
 			{
 				continue;
 			}
@@ -733,7 +726,7 @@ public class WorldHopperPlugin extends Plugin
 			return;
 		}
 
-		if (worldFinder.isHopInProgress()) // World Finder: don't queue a second hop
+		if (worldFinder.isHopInProgress())
 		{
 			return;
 		}
@@ -795,7 +788,7 @@ public class WorldHopperPlugin extends Plugin
 		else
 		{
 			client.hopToWorld(quickHopTargetWorld);
-			worldFinder.onHopSent(); // World Finder
+			worldFinder.onHopSent();
 			resetQuickHopper();
 		}
 	}

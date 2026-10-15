@@ -34,10 +34,10 @@ import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.Keybind;
 
-@ConfigGroup(WorldHopperConfig.GROUP)
-public interface WorldHopperConfig extends Config
+@ConfigGroup(WorldFinderConfig.GROUP)
+public interface WorldFinderConfig extends Config
 {
-	String GROUP = "worldfinder"; // World Finder: own config group
+	String GROUP = "worldfinder";
 
 	@ConfigItem(
 		keyName = "previousKey",
@@ -159,8 +159,6 @@ public interface WorldHopperConfig extends Config
 	{
 		return false;
 	}
-
-	// World Finder options
 
 	@ConfigItem(
 		keyName = "skillTotalFilter",
