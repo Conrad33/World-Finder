@@ -163,7 +163,7 @@ public interface WorldFinderConfig extends Config
 	@ConfigItem(
 		keyName = "skillTotalFilter",
 		name = "Skill total filter",
-		description = "Only show and quick-hop to these skill total worlds (other worlds are unaffected).",
+		description = "Only show and quick-hop to these skill total worlds (other worlds are unaffected). Select only None to hide all skill total worlds.",
 		position = 12
 	)
 	default Set<SkillTotalFilter> skillTotalFilter()
