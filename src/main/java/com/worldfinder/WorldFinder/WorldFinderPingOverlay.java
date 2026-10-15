@@ -39,21 +39,21 @@ import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.ui.overlay.OverlayUtil;
 
-class WorldHopperPingOverlay extends Overlay
+class WorldFinderPingOverlay extends Overlay
 {
 	private static final int Y_OFFSET = 11;
 	private static final int X_OFFSET = 1;
 
 	private final Client client;
-	private final WorldHopperPlugin worldHopperPlugin;
-	private final WorldHopperConfig worldHopperConfig;
+	private final WorldFinderPlugin worldFinderPlugin;
+	private final WorldFinderConfig worldFinderConfig;
 
 	@Inject
-	private WorldHopperPingOverlay(Client client, WorldHopperPlugin worldHopperPlugin, WorldHopperConfig worldHopperConfig)
+	private WorldFinderPingOverlay(Client client, WorldFinderPlugin worldFinderPlugin, WorldFinderConfig worldFinderConfig)
 	{
 		this.client = client;
-		this.worldHopperPlugin = worldHopperPlugin;
-		this.worldHopperConfig = worldHopperConfig;
+		this.worldFinderPlugin = worldFinderPlugin;
+		this.worldFinderConfig = worldFinderConfig;
 		setLayer(OverlayLayer.ABOVE_WIDGETS);
 		setPriority(PRIORITY_HIGH);
 		setPosition(OverlayPosition.DYNAMIC);
@@ -62,7 +62,7 @@ class WorldHopperPingOverlay extends Overlay
 	@Override
 	public Dimension render(Graphics2D graphics)
 	{
-		if (!worldHopperConfig.displayPing())
+		if (!worldFinderConfig.displayPing())
 		{
 			return null;
 		}
@@ -80,7 +80,7 @@ class WorldHopperPingOverlay extends Overlay
 		final int textHeight = fm.getAscent() - fm.getDescent();
 		final int width = (int) client.getRealDimensions().getWidth();
 
-		final int ping = worldHopperPlugin.getCurrentPing();
+		final int ping = worldFinderPlugin.getCurrentPing();
 		if (ping >= 0)
 		{
 			String text = ping + " ms";
@@ -90,7 +90,7 @@ class WorldHopperPingOverlay extends Overlay
 			xOffset += textWidth + fm.stringWidth(" ");
 		}
 
-		int percRetransmit = worldHopperPlugin.retransmitCalculator.getRetransmitPercent();
+		int percRetransmit = worldFinderPlugin.retransmitCalculator.getRetransmitPercent();
 		if (percRetransmit > 0)
 		{
 			String text = percRetransmit + "% loss";

@@ -14,7 +14,7 @@ repositories {
 }
 
 def runeLiteVersion = 'latest.release'
-def pluginMainClass = 'com.worldfinder.WorldFinder.WorldHopperPluginTest'
+def pluginMainClass = 'com.worldfinder.WorldFinder.WorldFinderPluginTest'
 
 dependencies {
 	compileOnly group: 'net.runelite', name:'client', version: runeLiteVersion
