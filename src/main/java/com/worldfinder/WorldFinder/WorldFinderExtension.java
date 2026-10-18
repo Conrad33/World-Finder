@@ -9,7 +9,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import lombok.AccessLevel;
+import lombok.Getter;
 import net.runelite.api.Client;
+import net.runelite.api.GameState;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.client.config.ConfigManager;
@@ -45,16 +48,20 @@ class WorldFinderExtension
 	private WSClient wsClient;
 
 	private final Map<Integer, Long> lastVisited = new ConcurrentHashMap<>();
-	private Runnable onTimersChanged;
+	private final Set<Integer> tagged = ConcurrentHashMap.newKeySet();
+	@Getter(AccessLevel.PACKAGE)
+	private boolean taggedOnly;
+	private Runnable onChanged;
 	// client thread only
 	private int hopSentTick = -1;
 	private boolean hopStarted;
 
-	void startUp(Runnable onTimersChanged)
+	void startUp(Runnable onChanged)
 	{
-		this.onTimersChanged = onTimersChanged;
+		this.onChanged = onChanged;
 		migrateConfig();
 		wsClient.registerMessage(WorldTimerUpdate.class);
+		wsClient.registerMessage(WorldTagUpdate.class);
 		eventBus.register(this);
 	}
 
@@ -62,6 +69,7 @@ class WorldFinderExtension
 	{
 		eventBus.unregister(this);
 		wsClient.unregisterMessage(WorldTimerUpdate.class);
+		wsClient.unregisterMessage(WorldTagUpdate.class);
 		clearHop();
 	}
 
@@ -80,7 +88,7 @@ class WorldFinderExtension
 	{
 		stamp(fromWorld);
 		stamp(toWorld);
-		onTimersChanged.run();
+		onChanged.run();
 	}
 
 	private void stamp(int worldId)
@@ -102,13 +110,75 @@ class WorldFinderExtension
 	public void onWorldTimerUpdate(WorldTimerUpdate update)
 	{
 		lastVisited.put(update.getWorldId(), update.getTimeStamp());
-		onTimersChanged.run();
+		onChanged.run();
 	}
 
 	@Nullable
 	Long getLastVisited(int worldId)
 	{
 		return lastVisited.get(worldId);
+	}
+
+	// Local only, so one party member can't wipe everyone's timers
+	void clearTimers()
+	{
+		lastVisited.clear();
+		onChanged.run();
+	}
+
+	boolean isTagged(int worldId)
+	{
+		return tagged.contains(worldId);
+	}
+
+	void toggleCurrentWorldTag()
+	{
+		if (client.getGameState() == GameState.LOGGED_IN)
+		{
+			toggleTag(client.getWorld());
+		}
+	}
+
+	void toggleTag(int worldId)
+	{
+		boolean tag = !tagged.contains(worldId);
+		setTagged(worldId, tag);
+		if (partyService.isInParty())
+		{
+			partyService.send(new WorldTagUpdate(worldId, tag));
+		}
+	}
+
+	@Subscribe
+	public void onWorldTagUpdate(WorldTagUpdate update)
+	{
+		setTagged(update.getWorldId(), update.isTagged());
+	}
+
+	private void setTagged(int worldId, boolean tag)
+	{
+		if (tag)
+		{
+			tagged.add(worldId);
+		}
+		else
+		{
+			tagged.remove(worldId);
+		}
+		onChanged.run();
+	}
+
+	void toggleTaggedOnly()
+	{
+		taggedOnly = !taggedOnly;
+		onChanged.run();
+	}
+
+	// Local only, so one party member can't wipe everyone's tags
+	void clearTags()
+	{
+		tagged.clear();
+		onChanged.run();
 	}
 
 	String formatLastVisited(@Nullable Long timestamp)
@@ -124,6 +194,11 @@ class WorldFinderExtension
 
 	boolean isFiltered(World world)
 	{
+		if (taggedOnly && !tagged.contains(world.getId()))
+		{
+			return true;
+		}
+
 		Set<SkillTotalFilter> skillTotals = config.skillTotalFilter();
 		String activity = world.getActivity();
 		if (!skillTotals.isEmpty() && activity != null && activity.contains("skill total"))
