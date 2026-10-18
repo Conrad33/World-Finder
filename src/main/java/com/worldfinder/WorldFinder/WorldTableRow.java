@@ -38,7 +38,9 @@ import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
+import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.MatteBorder;
 import lombok.AccessLevel;
 import lombok.Getter;
 import net.runelite.client.ui.FontManager;
@@ -74,6 +76,7 @@ class WorldTableRow extends JPanel
 	private static final Color PVP_ARENA_WORLD = new Color(144, 179, 255);
 	private static final Color QUEST_SPEEDRUNNING_WORLD = new Color(94, 213, 201);
 	private static final Color FRESH_START_WORLD = new Color(255, 211, 83);
+	private static final Color TAGGED_WORLD = new Color(255, 152, 31);
 
 	static
 	{
@@ -100,6 +103,7 @@ class WorldTableRow extends JPanel
 	private final int worldLocation; // from enum WORLD_LOCATIONS
 
 	private final JMenuItem favoriteMenuOption = new JMenuItem();
+	private final JMenuItem tagMenuOption = new JMenuItem();
 
 	private JLabel worldField;
 	private JLabel playerCountField;
@@ -174,6 +178,7 @@ class WorldTableRow extends JPanel
 		final JPopupMenu popupMenu = new JPopupMenu();
 		popupMenu.setBorder(new EmptyBorder(5, 5, 5, 5));
 		popupMenu.add(favoriteMenuOption);
+		popupMenu.add(tagMenuOption);
 
 		setComponentPopupMenu(popupMenu);
 
@@ -247,6 +252,22 @@ class WorldTableRow extends JPanel
 	{
 		this.lastVisited = lastVisited;
 		timeField.setText(text);
+	}
+
+	void setTagged(boolean tagged, Runnable onToggleTag)
+	{
+		tagMenuOption.setText((tagged ? "Untag " : "Tag ") + world.getId());
+		for (ActionListener listener : tagMenuOption.getActionListeners())
+		{
+			tagMenuOption.removeActionListener(listener);
+		}
+		tagMenuOption.addActionListener(e -> onToggleTag.run());
+
+
+		// Untagged rows get the same left inset so columns stay aligned
+		setBorder(tagged
+			? new CompoundBorder(new MatteBorder(0, 2, 0, 0, TAGGED_WORLD), new EmptyBorder(2, 0, 2, 0))
+			: new EmptyBorder(2, 2, 2, 0));
 	}
 
 	void hidePing()

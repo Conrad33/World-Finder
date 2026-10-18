@@ -37,8 +37,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import javax.annotation.Nullable;
+import javax.swing.JButton;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
+import javax.swing.border.EmptyBorder;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
@@ -59,6 +61,8 @@ class WorldSwitcherPanel extends PluginPanel
 	private static final int TIME_COLUMN_WIDTH = 40;
 
 	private final JPanel listContainer = new JPanel();
+	private final JButton tagButton = new JButton();
+	private final JButton taggedOnlyButton = new JButton();
 
 	@Getter(AccessLevel.PACKAGE)
 	private boolean active;
@@ -92,6 +96,7 @@ class WorldSwitcherPanel extends PluginPanel
 
 		listContainer.setLayout(new GridLayout(0, 1));
 
+		add(buildButtons());
 		add(headerContainer);
 		add(listContainer);
 	}
@@ -254,6 +259,8 @@ class WorldSwitcherPanel extends PluginPanel
 	void populate(List<World> worlds, @Nullable EnumComposition worldLocations)
 	{
 		rows.clear();
+		tagButton.setText(plugin.getWorldFinder().isTagged(plugin.getCurrentWorld()) ? "Untag world" : "Tag world");
+		taggedOnlyButton.setText(plugin.getWorldFinder().isTaggedOnly() ? "Show all" : "Show tagged");
 
 		for (int i = 0; i < worlds.size(); i++)
 		{
@@ -336,6 +343,35 @@ class WorldSwitcherPanel extends PluginPanel
 
 		orderIndex = order;
 		updateList();
+	}
+
+	private JPanel buildButtons()
+	{
+		WorldFinderExtension worldFinder = plugin.getWorldFinder();
+
+		tagButton.addActionListener(e -> worldFinder.toggleCurrentWorldTag());
+
+		taggedOnlyButton.addActionListener(e -> worldFinder.toggleTaggedOnly());
+
+		JPanel tagButtons = new JPanel(new GridLayout(1, 2, 5, 0));
+		tagButtons.add(tagButton);
+		tagButtons.add(taggedOnlyButton);
+
+		JButton clearTimersButton = new JButton("Clear times");
+		clearTimersButton.addActionListener(e -> worldFinder.clearTimers());
+
+		JButton clearTagsButton = new JButton("Clear tags");
+		clearTagsButton.addActionListener(e -> worldFinder.clearTags());
+
+		JPanel clearButtons = new JPanel(new GridLayout(1, 2, 5, 0));
+		clearButtons.add(clearTimersButton);
+		clearButtons.add(clearTagsButton);
+
+		JPanel buttons = new JPanel(new GridLayout(2, 1, 0, 5));
+		buttons.setBorder(new EmptyBorder(5, 5, 5, 5));
+		buttons.add(tagButtons);
+		buttons.add(clearButtons);
+		return buttons;
 	}
 
 	/**
@@ -464,6 +500,7 @@ class WorldSwitcherPanel extends PluginPanel
 		row.setBackground(stripe ? ODD_ROW : ColorScheme.DARK_GRAY_COLOR);
 		Long lastVisited = plugin.getWorldFinder().getLastVisited(world.getId());
 		row.setLastVisited(lastVisited, plugin.getWorldFinder().formatLastVisited(lastVisited));
+		row.setTagged(plugin.getWorldFinder().isTagged(world.getId()), () -> plugin.getWorldFinder().toggleTag(world.getId()));
 		return row;
 	}
 
